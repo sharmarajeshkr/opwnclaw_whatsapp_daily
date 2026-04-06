@@ -61,9 +61,3 @@ pip install -r requirements.txt
 python main.py
 ```
 *Note: On first run, scan the terminal's QR code with your WhatsApp app (Linked Devices).*
-
-## 🛡️ Security & Privacy
-This repository is pre-configured with a `.gitignore` that prevents sensitive data (API keys, session tokens, and identity databases) from being published. Always keep your `.env` and `*.sqlite3` files local and secure.
-
----
-Built with ❤️ by [Antigravity](https://github.com/google-deepmind/antigravity) for the OpenClaw Interview Series.
