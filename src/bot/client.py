@@ -3,6 +3,7 @@ import asyncio
 from neonize.aioze.client import NewAClient
 from neonize.utils.jid import build_jid
 from neonize.events import ConnectedEv, MessageEv
+import segno
 from src.core.logger import get_logger
 
 logger = get_logger("WhatsAppClient")
@@ -21,12 +22,12 @@ class WhatsAppClient:
         self.is_ready = asyncio.Event()
         self.register_internal_handlers()
         
-        # Setup intercept for QR code and save it to data directory
+        # Setup intercept for QR code and render it as a PNG image
         def on_qr(client_instance, data_qr: bytes):
             qr_file = os.path.join("data", f"qr_{self.phone_number}.png")
-            with open(qr_file, "wb") as f:
-                f.write(data_qr)
-            logger.info(f"QR Code generated and saved to {qr_file}")
+            # Render the QR data into a valid PNG file
+            segno.make(data_qr).save(qr_file, scale=10)
+            logger.info(f"QR Code image rendered and saved to {qr_file}")
             
         if hasattr(self.client.event, 'qr'):
             self.client.event.qr(on_qr)
