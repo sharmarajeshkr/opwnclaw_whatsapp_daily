@@ -1,16 +1,11 @@
 import os
 import asyncio
-import time
-from dotenv import load_dotenv
 from neonize.aioze.client import NewAClient
 from neonize.utils.jid import build_jid
 from neonize.events import ConnectedEv, MessageEv
-from src.logger_config import get_logger
-logger = get_logger(os.path.basename(__file__) if "__file__" in locals() else "OpenClawBot")
+from src.core.logger import get_logger
 
-
-load_dotenv()
-
+logger = get_logger("WhatsAppClient")
 
 class WhatsAppClient:
     def __init__(self, phone_number: str):
@@ -26,7 +21,7 @@ class WhatsAppClient:
         self.is_ready = asyncio.Event()
         self.register_internal_handlers()
         
-        # Intercept QR code and save it
+        # Setup intercept for QR code and save it to data directory
         def on_qr(client_instance, data_qr: bytes):
             qr_file = os.path.join("data", f"qr_{self.phone_number}.png")
             with open(qr_file, "wb") as f:
@@ -42,7 +37,7 @@ class WhatsAppClient:
         """Register handlers for connection lifecycle."""
         @self.client.event(ConnectedEv)
         async def on_connected(client: NewAClient, event: ConnectedEv):
-            logger.debug("DEBUG: Received ConnectedEv from WhatsApp")
+            logger.debug(f"[{self.phone_number}] ConnectedEv event received.")
             self.is_ready.set()
             self.connected = True
 
@@ -51,7 +46,7 @@ class WhatsAppClient:
         if self.connected and self.is_ready.is_set():
             return
             
-        logger.debug("DEBUG: Starting WhatsApp connection...")
+        logger.info(f"[{self.phone_number}] Initiating WhatsApp connection...")
         self.is_ready.clear()
         
         # Start the connection task
@@ -59,11 +54,11 @@ class WhatsAppClient:
         
         # Wait for the ConnectedEv or timeout
         try:
-            logger.debug("DEBUG: Waiting for ConnectedEv signal...")
+            logger.debug(f"[{self.phone_number}] Waiting for connection signal...")
             await asyncio.wait_for(self.is_ready.wait(), timeout=60)
-            logger.info("✅ WhatsApp fully ready and synchronized")
+            logger.info(f"✅ [{self.phone_number}] WhatsApp connection ready.")
         except asyncio.TimeoutError:
-            logger.error("ERROR: Timeout waiting for WhatsApp connection signal")
+            logger.error(f"❌ [{self.phone_number}] Timeout waiting for WhatsApp connection.")
             self.connected = False
 
     async def ensure_connected(self):
@@ -73,38 +68,26 @@ class WhatsAppClient:
 
     async def send_message(self, text: str, retries: int = 3):
         await self.ensure_connected()
-
-        if not self.phone_number:
-            raise ValueError("phone_number missing for this client")
-
-        # Use build_jid directly with the number string; neonize handles the server suffix internally.
         jid = build_jid(self.phone_number)
         
         for attempt in range(retries):
             try:
-                logger.debug(f"DEBUG: Sending to {jid} (Attempt {attempt+1}/{retries})")
                 await self.client.send_message(jid, text)
-                logger.info("✅ Message sent successfully")
+                logger.debug(f"✅ [{self.phone_number}] Message sent to {jid} (Attempt {attempt+1})")
                 return
             except Exception as e:
-                logger.error(f"ERROR: Failed to send message (Attempt {attempt+1}): {e}")
+                logger.error(f"Error sending message (Attempt {attempt+1}): {e}")
                 if attempt < retries - 1:
                     await asyncio.sleep(5 * (attempt + 1))  # Exponential backoff
                 else:
-                    logger.info("❌ Final attempt failed. Message aborted.")
                     raise e
 
     async def send_image(self, image_path: str, caption: str = None, retries: int = 3):
         await self.ensure_connected()
-
-        if not self.phone_number:
-            raise ValueError("phone_number missing for this client")
-
-        # Use build_jid directly with the number string; neonize handles the server suffix internally.
         jid = build_jid(self.phone_number)
 
         if not os.path.exists(image_path):
-            logger.error(f"ERROR: Image file not found at {image_path}")
+            logger.error(f"Image not found at {image_path}")
             return
 
         with open(image_path, "rb") as f:
@@ -112,21 +95,23 @@ class WhatsAppClient:
 
         for attempt in range(retries):
             try:
-                logger.debug(f"DEBUG: Sending image to {jid} (Attempt {attempt+1}/{retries})")
                 await self.client.send_image(jid, image_bytes, caption=caption)
-                logger.info("✅ Image sent successfully")
+                logger.debug(f"✅ [{self.phone_number}] Image sent successfully (Attempt {attempt+1})")
                 return
             except Exception as e:
-                logger.error(f"ERROR: Failed to send image (Attempt {attempt+1}): {e}")
+                logger.error(f"Error sending image (Attempt {attempt+1}): {e}")
                 if attempt < retries - 1:
                     await asyncio.sleep(5 * (attempt + 1))
                 else:
                     raise e
 
-    def register_incoming_handler(self):
-        """Register callback for incoming replies."""
-
-        @self.client.event(MessageEv)
-        async def on_message(client: NewAClient, message: MessageEv):
-            logger.info("📩 Incoming WhatsApp message received")
-            logger.info(message)
+    def register_incoming_handler(self, handler=None):
+        """Register callback for incoming messages."""
+        if handler:
+             @self.client.event(MessageEv)
+             async def on_message(client: NewAClient, message: MessageEv):
+                 await handler(client, message)
+        else:
+             @self.client.event(MessageEv)
+             async def on_message(client: NewAClient, message: MessageEv):
+                 logger.info(f"📩 [{self.phone_number}] Incoming message: {message}")

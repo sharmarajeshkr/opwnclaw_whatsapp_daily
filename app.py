@@ -4,7 +4,10 @@ import datetime
 import os
 import json
 import time
-from src.config_manager import ConfigManager
+from src.core.config import ConfigManager, UserConfig
+from src.core.logger import get_logger
+
+logger = get_logger("StreamlitApp")
 
 st.set_page_config(
     page_title="OpenClaw Bot Configurator",
@@ -18,7 +21,7 @@ st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
 
-html, body, [class*="css"] { font-family: 'Inter', sans-serif; }
+html, body, [class*="st-"] { font-family: 'Inter', sans-serif; }
 
 /* Dark glassmorphism cards */
 .glass-card {
@@ -95,7 +98,7 @@ html, body, [class*="css"] { font-family: 'Inter', sans-serif; }
 
 # ── Header ───────────────────────────────────────────────────────────────────
 st.markdown('<p class="hero-title">🦀 OpenClaw — Multi-User Bot Dashboard</p>', unsafe_allow_html=True)
-st.markdown('<p class="hero-sub">Manage WhatsApp delivery profiles, schedules, and content topics per user.</p>', unsafe_allow_html=True)
+st.markdown('<p class="hero-sub">Manage WhatsApp delivery profiles and schedules for each user.</p>', unsafe_allow_html=True)
 
 # ── Tabs ─────────────────────────────────────────────────────────────────────
 tab_profiles, tab_config, tab_control, tab_logs = st.tabs([
@@ -116,11 +119,12 @@ with tab_profiles:
     if users:
         for phone in users:
             cfg = ConfigManager.load_config(phone)
-            sched = cfg.get("schedule_time", "—")
-            topics = cfg.get("topics", {})
-            topic_list = ", ".join(t for t in topics.values() if t)
+            sched = cfg.schedule_time if cfg.schedule_time else "—"
+            topics = cfg.topics
+            active_topics = [v for k, v in topics.model_dump().items() if v]
+            topic_list = ", ".join(active_topics)
             qr_path = os.path.join("data", f"qr_{phone}.png")
-            paired = not os.path.exists(qr_path)  # QR gone = already paired
+            paired = not os.path.exists(qr_path)
 
             col_info, col_badge = st.columns([5, 1])
             with col_info:
@@ -136,16 +140,13 @@ with tab_profiles:
                 if paired:
                     st.markdown('<span class="badge-active">● Paired</span>', unsafe_allow_html=True)
                 else:
-                    st.markdown('<span class="badge-pending">◌ Pending QR</span>', unsafe_allow_html=True)
+                    st.markdown('<span class="badge-pending">◌ Scan QR</span>', unsafe_allow_html=True)
     else:
-        st.info("No users registered yet. Use the form below to add the first one.")
+        st.info("No users registered yet.")
 
     st.divider()
 
-    # ── Add New User ─────────────────────────────────────────────────────────
     st.subheader("➕ Register New User")
-    st.markdown("Enter the mobile number and scan the generated QR code in WhatsApp to pair.")
-
     with st.form("new_user_form", clear_on_submit=True):
         col_ph, col_btn = st.columns([3, 1])
         with col_ph:
@@ -161,24 +162,24 @@ with tab_profiles:
         if register_btn:
             raw = new_phone.strip().lstrip("+")
             if len(raw) < 8:
-                st.error("Please enter a valid number with country code.")
+                st.error("Please enter a valid number.")
             elif raw in users:
                 st.warning(f"+{raw} is already registered.")
             else:
-                # Create default config for new user
-                ConfigManager.load_config(raw)  # triggers auto-create
-                # Launch a background neonize process to generate the QR
+                # Triggers user config creation
+                ConfigManager.load_config(raw)
+                # Background subprocess to capture QR code
                 subprocess.Popen(
                     ["powershell", "-Command",
                      f'Start-Process -NoNewWindow .\\venv\\Scripts\\python.exe '
-                     f'-ArgumentList "-c","from src.whatsapp_client import WhatsAppClient; '
+                     f'-ArgumentList "-c","from src.bot.client import WhatsAppClient; '
                      f'import asyncio; c = WhatsAppClient(chr(39)+{raw!r}+chr(39)); asyncio.run(c.connect())"'],
                 )
-                st.success(f"✅ Registration started for +{raw}. QR code will appear below in a few seconds.")
-                time.sleep(4)
+                st.success(f"✅ Initializing registration for +{raw}. QR will appear shortly.")
+                time.sleep(3)
                 st.rerun()
 
-    # ── QR Display area ───────────────────────────────────────────────────────
+    # QR Display
     pending_qr_users = [
         u for u in ConfigManager.get_all_users()
         if os.path.exists(os.path.join("data", f"qr_{u}.png"))
@@ -187,21 +188,19 @@ with tab_profiles:
         st.subheader("📷 Pending QR Codes — Scan to Pair")
         for u in pending_qr_users:
             qr_path = os.path.join("data", f"qr_{u}.png")
-            st.markdown(f"**+{u}** — Scan this QR code in WhatsApp → Linked Devices")
-            st.markdown('<div class="qr-wrapper">', unsafe_allow_html=True)
+            st.markdown(f"**+{u}** — Scan in WhatsApp → Linked Devices")
             st.image(qr_path, caption=f"QR for +{u}", width=280)
-            st.markdown('</div>', unsafe_allow_html=True)
+            
             col_ref, col_del = st.columns([1, 1])
             with col_ref:
-                if st.button(f"🔄 Refresh QR for +{u}", key=f"refresh_{u}"):
+                if st.button(f"🔄 Refresh QR +{u}", key=f"r_{u}"):
                     st.rerun()
             with col_del:
-                if st.button(f"🗑️ Remove User +{u}", key=f"del_{u}"):
-                    cfg_path = ConfigManager.get_config_path(u)
-                    if os.path.exists(cfg_path):
-                        os.remove(cfg_path)
+                if st.button(f"🗑️ Delete User +{u}", key=f"d_{u}"):
+                    if os.path.exists(ConfigManager.get_config_path(u)):
+                         os.remove(ConfigManager.get_config_path(u))
                     if os.path.exists(qr_path):
-                        os.remove(qr_path)
+                         os.remove(qr_path)
                     st.rerun()
 
 # ────────────────────────────────────────────────────────────────────────────
@@ -212,13 +211,12 @@ with tab_config:
 
     all_users = ConfigManager.get_all_users()
     if not all_users:
-        st.warning("No users registered. Register a user first in the 'User Profiles' tab.")
+        st.warning("Please register a user first.")
     else:
         selected_user = st.selectbox(
-            "Select User",
+            "Select User to Configure",
             options=all_users,
             format_func=lambda x: f"+{x}",
-            key="config_user_select",
         )
 
         config = ConfigManager.load_config(selected_user)
@@ -226,100 +224,97 @@ with tab_config:
         with st.form("user_config_form"):
             col_s1, col_s2, col_s3 = st.columns([1, 1, 1])
             with col_s1:
-                t_hour, t_min = map(int, config.get("schedule_time", "06:00").split(":"))
+                t_hour, t_min = map(int, config.schedule_time.split(":"))
                 schedule = st.time_input("Daily Delivery Time", value=datetime.time(t_hour, t_min))
             with col_s2:
-                sl_hook = st.text_input("Slack Webhook URL", value=config["channels"].get("slack_webhook_url", ""))
+                sl_hook = st.text_input("Slack Webhook URL", value=config.channels.slack_webhook_url)
             with col_s3:
-                tg_token = st.text_input("Telegram Bot Token", value=config["channels"].get("telegram_bot_token", ""))
+                tg_token = st.text_input("Telegram Bot Token", value=config.channels.telegram_bot_token)
 
             col_t1, col_t2 = st.columns(2)
             with col_t1:
-                tg_chat = st.text_input("Telegram Chat ID", value=config["channels"].get("telegram_chat_id", ""))
+                tg_chat = st.text_input("Telegram Chat ID", value=config.channels.telegram_chat_id)
 
-            st.subheader("📚 5-Part Content Sequence")
+            st.markdown("---")
+            st.subheader("📚 Content Sequence Topics")
             col_c1, col_c2 = st.columns(2)
+                
             with col_c1:
-                t1 = st.text_input("1. Architecture Challenge", value=config["topics"].get("topic_1", "Architecture Challenge"))
-                t2 = st.text_input("2. Deep Dive Subject 1", value=config["topics"].get("topic_2", "Kafka"))
-                t3 = st.text_input("3. Deep Dive Subject 2", value=config["topics"].get("topic_3", "Agentic AI"))
+                t1 = st.text_input("1. Architecture Challenge", value=config.topics.topic_1)
+                t2 = st.text_input("2. Deep Dive Subject 1", value=config.topics.topic_2)
+                t3 = st.text_input("3. Deep Dive Subject 2", value=config.topics.topic_3)
             with col_c2:
-                t4 = st.text_input("4. Fresh Updates 1", value=config["topics"].get("topic_4", "AI News"))
-                t5 = st.text_input("5. Fresh Updates 2", value=config["topics"].get("topic_5", "Latest Global News"))
+                t4 = st.text_input("4. Fresh Updates 1", value=config.topics.topic_4)
+                t5 = st.text_input("5. Fresh Updates 2", value=config.topics.topic_5)
                 st.markdown("<br>", unsafe_allow_html=True)
-                save_btn = st.form_submit_button("💾 Save Configuration", type="primary", use_container_width=True)
+                save_btn = st.form_submit_button("💾 Save User Configuration", type="primary", use_container_width=True)
 
             if save_btn:
-                config["schedule_time"] = schedule.strftime("%H:%M")
-                config["topics"] = {
-                    "topic_1": t1, "topic_2": t2, "topic_3": t3,
-                    "topic_4": t4, "topic_5": t5,
-                }
-                config["channels"] = {
-                    "whatsapp_target": selected_user,
-                    "telegram_bot_token": tg_token,
-                    "telegram_chat_id": tg_chat,
-                    "slack_webhook_url": sl_hook,
-                }
-                ConfigManager.save_config(selected_user, config)
-                st.success(f"✅ Configuration saved for +{selected_user}! Restart the bot to apply changes.")
+                new_cfg = UserConfig(
+                    schedule_time=schedule.strftime("%H:%M"),
+                    topics={
+                        "topic_1": t1, "topic_2": t2, "topic_3": t3,
+                        "topic_4": t4, "topic_5": t5,
+                    },
+                    channels={
+                        "whatsapp_target": selected_user,
+                        "telegram_bot_token": tg_token,
+                        "telegram_chat_id": tg_chat,
+                        "slack_webhook_url": sl_hook,
+                    }
+                )
+                ConfigManager.save_config(selected_user, new_cfg)
+                st.success(f"✅ Saved for +{selected_user}! Restart bot component to apply.")
 
 # ────────────────────────────────────────────────────────────────────────────
 # TAB 3 — SYSTEM CONTROL
 # ────────────────────────────────────────────────────────────────────────────
 with tab_control:
-    st.subheader("🚀 System Control")
-    st.markdown("Start or stop the multi-user backend daemon (`main.py`).")
+    st.subheader("🚀 Daemon Orchestration")
+    st.markdown("Manage the multi-user background bot process.")
 
     col1, col2 = st.columns(2)
     with col1:
-        if st.button("🚀 Start Bot Daemon", id="start_bot_btn", use_container_width=True):
+        if st.button("🚀 Start Bot Daemon", use_container_width=True):
             subprocess.Popen([
                 "powershell", "-Command",
                 "Start-Process -NoNewWindow .\\venv\\Scripts\\python.exe main.py"
             ])
-            st.success("✅ Multi-user bot daemon triggered!")
+            st.success("✅ Main bot daemon triggered.")
     with col2:
-        if st.button("🛑 Stop All Bots", id="stop_bot_btn", use_container_width=True):
+        if st.button("🛑 Stop Active Bots", use_container_width=True):
             subprocess.run(
                 'powershell -Command "Get-Process -Name python -ErrorAction SilentlyContinue '
                 '| Where-Object { $_.CommandLine -match \'main.py\' } | Stop-Process -Force"',
                 shell=True,
             )
-            st.warning("⏹️ Stop signal sent to all running bot processes.")
+            st.warning("⏺️ Terminated bot processes.")
 
     st.divider()
-    st.subheader("📊 Registered Users Summary")
     all_u = ConfigManager.get_all_users()
     if all_u:
         rows = []
         for u in all_u:
             c = ConfigManager.load_config(u)
             rows.append({
-                "Phone": f"+{u}",
-                "Schedule": c.get("schedule_time", "—"),
-                "Topic 1": c["topics"].get("topic_1", ""),
-                "Topic 2": c["topics"].get("topic_2", ""),
-                "Status": "Pending QR" if os.path.exists(os.path.join("data", f"qr_{u}.png")) else "Paired",
+                "User": f"+{u}",
+                "Delivery Time": c.schedule_time,
+                "Status": "Ready" if not os.path.exists(os.path.join("data", f"qr_{u}.png")) else "Awaiting Pair"
             })
         st.dataframe(rows, use_container_width=True)
-    else:
-        st.info("No users registered.")
 
 # ────────────────────────────────────────────────────────────────────────────
 # TAB 4 — LOGS
 # ────────────────────────────────────────────────────────────────────────────
 with tab_logs:
-    st.subheader("📜 Live System Logs")
-    col_ref, _ = st.columns([1, 5])
-    with col_ref:
-        if st.button("🔄 Refresh", id="refresh_logs_btn"):
-            pass
+    st.subheader("📜 System Logs")
+    if st.button("刷新", id="refresh_btn"):
+        pass
 
     log_path = os.path.join("data", "bot.log")
     if os.path.exists(log_path):
         with open(log_path, "r", encoding="utf-8") as f:
             lines = f.readlines()
-        st.code("".join(lines[-100:]), language="log")
+        st.code("".join(lines[-100:]))
     else:
-        st.info("No logs generated yet. Start the bot daemon to begin.")
+        st.info("Log file not available.")

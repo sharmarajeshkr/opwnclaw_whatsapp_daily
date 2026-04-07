@@ -1,74 +1,70 @@
-import os
 import asyncio
 import sys
-from dotenv import load_dotenv
-from src.agent import InterviewAgent
-from src.whatsapp_client import WhatsAppClient
-from src.scheduler import InterviewScheduler
-from src.config_manager import ConfigManager
+from src.core.env import load_env, get_interview_topic, require_llm_key
+from src.core.config import ConfigManager
+from src.core.logger import get_logger
+from src.content.agent import InterviewAgent
+from src.bot.client import WhatsAppClient
+from src.scheduling.scheduler import InterviewScheduler
 
-import logging
-from src.logger_config import get_logger
-logger = get_logger(os.path.basename(__file__) if "__file__" in locals() else "OpenClawBot")
+logger = get_logger("Main")
 
-logging.basicConfig(level=logging.INFO)
-
-load_dotenv()
-
-
-async def run_user_bot(phone_number: str, agent: InterviewAgent):
+async def run_user_bot(phone_number: str, shared_topic: str):
     """Initialize and run WhatsApp bot + scheduler for a single user."""
-    logger.info(f"🚀 Starting bot for user: {phone_number}")
+    logger.info(f"🚀 Initializing bot for user: {phone_number}")
+    
+    # Each user gets their own agent instance (with their own history)
+    agent = InterviewAgent(phone_number=phone_number, topic=shared_topic)
     whatsapp = WhatsAppClient(phone_number=phone_number)
     scheduler = InterviewScheduler(agent, whatsapp, phone_number=phone_number)
+    
     await scheduler.start()
 
-    # Keep this user's task alive
+    # Keep this user's concurrent task alive
     while True:
         await asyncio.sleep(60)
-        logger.debug(f"💓 Heartbeat — {phone_number}")
-
+        logger.debug(f"Heartbeat — {phone_number}")
 
 async def main():
-    """Main entry point — spins up a bot for every registered user."""
+    """Main entry point — orchestration of all registered users."""
+    load_env()
+    
     logger.info("---------------------------------------------")
     logger.info("      OpenClaw Multi-User Bot Daemon         ")
     logger.info("---------------------------------------------")
 
-    # Check for API keys
-    gemini_key = os.getenv("GEMINI_API_KEY")
-    openai_key = os.getenv("OPENAI_API_KEY")
-    if not (gemini_key or openai_key):
-        logger.error("ERROR: Please set GEMINI_API_KEY or OPENAI_API_KEY in .env file.")
+    # Validate LLM keys early
+    try:
+        require_llm_key()
+    except ValueError as e:
+        logger.error(f"FATAL: {e}")
         sys.exit(1)
 
-    # Shared agent (stateless, safe to reuse across users)
-    agent = InterviewAgent(topic=os.getenv("INTERVIEW_TOPIC", "Software Engineering"))
+    shared_topic = get_interview_topic()
 
     # Discover all registered users
     users = ConfigManager.get_all_users()
     if not users:
-        logger.warning("⚠️  No users registered yet. Add users via the Streamlit dashboard.")
-        logger.info("Waiting for users to be registered... (polling every 30s)")
+        logger.warning("⚠️ No users registered yet. Add users via the Streamlit dashboard.")
+        logger.info("Waiting for first registration... (polling every 30s)")
         while True:
             await asyncio.sleep(30)
             users = ConfigManager.get_all_users()
             if users:
-                logger.info(f"✅ Found {len(users)} registered user(s). Starting bots...")
+                logger.info(f"✅ Found {len(users)} registered users. Starting...")
                 break
 
-    logger.info(f"📋 Registered users: {users}")
+    logger.info(f"📋 Initializing bots for: {users}")
 
-    # Launch a concurrent task per user
-    tasks = [asyncio.create_task(run_user_bot(phone, agent)) for phone in users]
+    # Launch concurrent tasks for all registered users
+    tasks = [asyncio.create_task(run_user_bot(phone, shared_topic)) for phone in users]
 
-    logger.info(f"✅ {len(tasks)} user bot(s) active and running!")
+    logger.info(f"✅ {len(tasks)} user bots are now active.")
 
     try:
         await asyncio.gather(*tasks)
     except KeyboardInterrupt:
-        logger.info("Bot stopped by user.")
-
+        logger.info("Termination signal received. Shutting down...")
 
 if __name__ == "__main__":
     try:

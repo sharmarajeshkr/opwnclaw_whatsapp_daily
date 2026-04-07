@@ -6,8 +6,9 @@ def get_logger(name: str = "OpenClawBot") -> logging.Logger:
     """Configures and returns a centralized logger."""
     logger = logging.getLogger(name)
 
+    # If the logger already has handlers, don't add more (avoids duplicate logs)
     if not logger.handlers:
-        logger.setLevel(logging.DEBUG)  # Capture all levels
+        logger.setLevel(logging.DEBUG)
 
         # Define formats
         file_formatter = logging.Formatter('%(asctime)s - [%(levelname)s] - %(name)s - %(message)s')
@@ -26,7 +27,7 @@ def get_logger(name: str = "OpenClawBot") -> logging.Logger:
 
         # Console Handler
         console_handler = logging.StreamHandler()
-        console_handler.setLevel(logging.INFO)  # Keep terminal cleaner, INFO+ only
+        console_handler.setLevel(logging.INFO)
         console_handler.setFormatter(console_formatter)
 
         # Attach handlers

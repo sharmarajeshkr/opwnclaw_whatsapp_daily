@@ -1,6 +1,31 @@
+# Environment variables
 .env
+
+# Virtual environment
 venv/
+.venv/
+
+# Databases and sessions
 *.sqlite3*
-data/
+data/users/*.sqlite3
+data/history/
+
+# WhatsApp QR codes
+data/qr_*.png
+
+# Logs
+data/bot.log
+logs/
+
+# Python cache
 __pycache__/
+*.pyc
+
+# IDEs
+.vscode/
+.idea/
 .DS_Store
+
+# Temporary files
+tmp/
+*.tmp
