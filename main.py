@@ -37,8 +37,8 @@ async def main():
     await whatsapp.connect()
     
     # 2. Wait for initialization (QR code scan if needed, and initial sync)
-    print("DEBUG: Waiting for initialization and sync sleep(10)...", flush=True)
-    await asyncio.sleep(10)
+    print("DEBUG: Waiting for initialization and background sync sleep(30)...", flush=True)
+    await asyncio.sleep(30)
     
     # 3. Setup and start the daily scheduler
     print("\nInitializing Daily Scheduler...", flush=True)
@@ -48,7 +48,7 @@ async def main():
     print("\nSending an initial greeting to confirm connection...", flush=True)
     await scheduler.daily_task()
     
-    scheduler.start()
+    await scheduler.start()
 
     
     # 4. Success message
@@ -61,7 +61,8 @@ async def main():
     # Keep the main thread alive
     try:
         while True:
-            await asyncio.sleep(3600)  # Wake up every hour
+            await asyncio.sleep(60)  # Wake up every minute
+            print("DEBUG: Scheduler heartbeat - Waiting for next daily update...", flush=True)
     except KeyboardInterrupt:
         print("\nBot stopped by user.")
 

@@ -63,9 +63,6 @@ class InterviewScheduler:
         self.scheduler.start()
         print(f"✅ Scheduler started for daily delivery at {self.schedule_time}")
 
-        while True:
-            await asyncio.sleep(3600)
-
 
 async def main():
     agent = InterviewAgent("Senior Java + Kafka + Spring Boot")
