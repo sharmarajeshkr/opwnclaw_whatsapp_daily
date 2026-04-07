@@ -1,0 +1,16 @@
+{
+    "schedule_time": "18:45",
+    "topics": {
+        "topic_1": "Architecture Challenge",
+        "topic_2": "Kafka",
+        "topic_3": "Agentic AI",
+        "topic_4": "AI News",
+        "topic_5": "Latest Global News"
+    },
+    "channels": {
+        "whatsapp_target": "+919789824976",
+        "telegram_bot_token": "",
+        "telegram_chat_id": "",
+        "slack_webhook_url": ""
+    }
+}

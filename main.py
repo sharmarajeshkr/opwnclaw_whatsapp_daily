@@ -8,21 +8,24 @@ from src.scheduler import InterviewScheduler
 
 # For logging
 import logging
+from src.logger_config import get_logger
+logger = get_logger(os.path.basename(__file__) if "__file__" in locals() else "OpenClawBot")
+
 logging.basicConfig(level=logging.INFO)
 
 load_dotenv()
 
 async def main():
     """Main entry point for the Interview Question WhatsApp Bot."""
-    print("---------------------------------------------")
-    print("      Interview Bot - OpenClaw      ")
-    print("---------------------------------------------")
+    logger.info("---------------------------------------------")
+    logger.info("      Interview Bot - OpenClaw      ")
+    logger.info("---------------------------------------------")
     
     # Check for API keys
     gemini_key = os.getenv("GEMINI_API_KEY")
     openai_key = os.getenv("OPENAI_API_KEY")
     if not (gemini_key or openai_key):
-        print("ERROR: Please set GEMINI_API_KEY or OPENAI_API_KEY in .env file.")
+        logger.error("ERROR: Please set GEMINI_API_KEY or OPENAI_API_KEY in .env file.")
         sys.exit(1)
 
     # Initialize components
@@ -30,41 +33,41 @@ async def main():
     whatsapp = WhatsAppClient(session_name=os.getenv("WHATSAPP_SESSION_NAME", "interview_bot"))
     
     # 1. Start WhatsApp connection
-    print("\n---------------------------------------------")
-    print("ACTION REQUIRED: Scan the QR code below!")
-    print("---------------------------------------------")
-    print("DEBUG: Starting WhatsApp connection...", flush=True)
+    logger.info("\n---------------------------------------------")
+    logger.info("ACTION REQUIRED: Scan the QR code below!")
+    logger.info("---------------------------------------------")
+    logger.debug("DEBUG: Starting WhatsApp connection...")
     await whatsapp.connect()
     
     # 2. Wait for initialization (QR code scan if needed, and initial sync)
-    print("DEBUG: Waiting for initialization and background sync sleep(30)...", flush=True)
+    logger.debug("DEBUG: Waiting for initialization and background sync sleep(30)...")
     await asyncio.sleep(30)
     
     # 3. Setup and start the daily scheduler
-    print("\nInitializing Daily Scheduler...", flush=True)
+    logger.info("\nInitializing Daily Scheduler...")
     scheduler = InterviewScheduler(agent, whatsapp)
     
     # Send an initial test message to confirm connection
-    print("\nSending an initial greeting to confirm connection...", flush=True)
+    logger.info("\nSending an initial greeting to confirm connection...")
     await scheduler.daily_task()
     
     await scheduler.start()
 
     
     # 4. Success message
-    print("\n---------------------------------------------")
-    print("BOT IS ACTIVE AND RUNNING!")
-    print(f"Location: c:\\openClaw_Interview")
-    print(f"Log: Scheduled for {os.getenv('SCHEDULE_TIME', '09:00')} daily.")
-    print("---------------------------------------------")
+    logger.info("\n---------------------------------------------")
+    logger.info("BOT IS ACTIVE AND RUNNING!")
+    logger.info(f"Location: c:\\openClaw_Interview")
+    logger.info(f"Log: Scheduled for {scheduler.schedule_time} daily.")
+    logger.info("---------------------------------------------")
     
     # Keep the main thread alive
     try:
         while True:
             await asyncio.sleep(60)  # Wake up every minute
-            print("DEBUG: Scheduler heartbeat - Waiting for next daily update...", flush=True)
+            logger.debug("DEBUG: Scheduler heartbeat - Waiting for next daily update...")
     except KeyboardInterrupt:
-        print("\nBot stopped by user.")
+        logger.info("\nBot stopped by user.")
 
 if __name__ == "__main__":
     try:

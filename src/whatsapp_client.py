@@ -5,6 +5,9 @@ from dotenv import load_dotenv
 from neonize.aioze.client import NewAClient
 from neonize.utils.jid import build_jid
 from neonize.events import ConnectedEv, MessageEv
+from src.logger_config import get_logger
+logger = get_logger(os.path.basename(__file__) if "__file__" in locals() else "OpenClawBot")
+
 
 load_dotenv()
 
@@ -21,7 +24,7 @@ class WhatsAppClient:
         """Register handlers for connection lifecycle."""
         @self.client.event(ConnectedEv)
         async def on_connected(client: NewAClient, event: ConnectedEv):
-            print("DEBUG: Received ConnectedEv from WhatsApp", flush=True)
+            logger.debug("DEBUG: Received ConnectedEv from WhatsApp")
             self.is_ready.set()
             self.connected = True
 
@@ -30,7 +33,7 @@ class WhatsAppClient:
         if self.connected and self.is_ready.is_set():
             return
             
-        print("DEBUG: Starting WhatsApp connection...", flush=True)
+        logger.debug("DEBUG: Starting WhatsApp connection...")
         self.is_ready.clear()
         
         # Start the connection task
@@ -38,11 +41,11 @@ class WhatsAppClient:
         
         # Wait for the ConnectedEv or timeout
         try:
-            print("DEBUG: Waiting for ConnectedEv signal...", flush=True)
+            logger.debug("DEBUG: Waiting for ConnectedEv signal...")
             await asyncio.wait_for(self.is_ready.wait(), timeout=60)
-            print("✅ WhatsApp fully ready and synchronized", flush=True)
+            logger.info("✅ WhatsApp fully ready and synchronized")
         except asyncio.TimeoutError:
-            print("ERROR: Timeout waiting for WhatsApp connection signal")
+            logger.error("ERROR: Timeout waiting for WhatsApp connection signal")
             self.connected = False
 
     async def ensure_connected(self):
@@ -62,16 +65,16 @@ class WhatsAppClient:
         
         for attempt in range(retries):
             try:
-                print(f"DEBUG: Sending to {jid} (Attempt {attempt+1}/{retries})", flush=True)
+                logger.debug(f"DEBUG: Sending to {jid} (Attempt {attempt+1}/{retries})")
                 await self.client.send_message(jid, text)
-                print("✅ Message sent successfully", flush=True)
+                logger.info("✅ Message sent successfully")
                 return
             except Exception as e:
-                print(f"ERROR: Failed to send message (Attempt {attempt+1}): {e}", flush=True)
+                logger.error(f"ERROR: Failed to send message (Attempt {attempt+1}): {e}")
                 if attempt < retries - 1:
                     await asyncio.sleep(5 * (attempt + 1))  # Exponential backoff
                 else:
-                    print("❌ Final attempt failed. Message aborted.", flush=True)
+                    logger.info("❌ Final attempt failed. Message aborted.")
                     raise e
 
     async def send_image(self, image_path: str, caption: str = None, retries: int = 3):
@@ -85,7 +88,7 @@ class WhatsAppClient:
         jid = build_jid(phone)
 
         if not os.path.exists(image_path):
-            print(f"ERROR: Image file not found at {image_path}")
+            logger.error(f"ERROR: Image file not found at {image_path}")
             return
 
         with open(image_path, "rb") as f:
@@ -93,12 +96,12 @@ class WhatsAppClient:
 
         for attempt in range(retries):
             try:
-                print(f"DEBUG: Sending image to {jid} (Attempt {attempt+1}/{retries})", flush=True)
+                logger.debug(f"DEBUG: Sending image to {jid} (Attempt {attempt+1}/{retries})")
                 await self.client.send_image(jid, image_bytes, caption=caption)
-                print("✅ Image sent successfully", flush=True)
+                logger.info("✅ Image sent successfully")
                 return
             except Exception as e:
-                print(f"ERROR: Failed to send image (Attempt {attempt+1}): {e}", flush=True)
+                logger.error(f"ERROR: Failed to send image (Attempt {attempt+1}): {e}")
                 if attempt < retries - 1:
                     await asyncio.sleep(5 * (attempt + 1))
                 else:
@@ -109,5 +112,5 @@ class WhatsAppClient:
 
         @self.client.event(MessageEv)
         async def on_message(client: NewAClient, message: MessageEv):
-            print("📩 Incoming WhatsApp message received")
-            print(message)
+            logger.info("📩 Incoming WhatsApp message received")
+            logger.info(message)

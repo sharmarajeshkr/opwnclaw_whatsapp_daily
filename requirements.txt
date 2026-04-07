@@ -17,3 +17,5 @@ rich
 pyte
 grpcio
 uc-micro-py
+streamlit
+requests

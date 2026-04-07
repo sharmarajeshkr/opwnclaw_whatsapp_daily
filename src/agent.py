@@ -1,6 +1,9 @@
 import os
 from dotenv import load_dotenv
 from src.history_manager import HistoryManager
+from src.logger_config import get_logger
+logger = get_logger(os.path.basename(__file__) if "__file__" in locals() else "OpenClawBot")
+
 
 load_dotenv()
 
@@ -23,25 +26,25 @@ class LLMProvider:
             raise ValueError("No API key found for Gemini or OpenAI in .env")
 
     async def generate_response(self, prompt: str) -> str:
-        print(f"DEBUG: Generating response with {self.provider}...", flush=True)
+        logger.debug(f"DEBUG: Generating response with {self.provider}...")
         if self.provider == "gemini":
             response = self.model.generate_content(prompt)
-            print("DEBUG: Gemini response received.", flush=True)
+            logger.debug("DEBUG: Gemini response received.")
             return response.text
         elif self.provider == "openai":
-            print(f"DEBUG: OpenAI ({self.model_name}) request starting...", flush=True)
+            logger.debug(f"DEBUG: OpenAI ({self.model_name}) request starting...")
             response = self.client.chat.completions.create(
                 model=self.model_name,
                 messages=[{"role": "user", "content": prompt}]
             )
-            print("DEBUG: OpenAI response received.", flush=True)
+            logger.debug("DEBUG: OpenAI response received.")
             return response.choices[0].message.content
         return ""
 
     async def generate_image(self, prompt: str) -> str:
         """Generates an image and returns the local file path."""
         if self.provider != "openai":
-            print("DEBUG: Image generation currently only supported via OpenAI provider.")
+            logger.debug("DEBUG: Image generation currently only supported via OpenAI provider.")
             return ""
 
         import httpx        
@@ -81,6 +84,29 @@ class InterviewAgent:
         """
         response = await self.llm.generate_response(prompt)        
         return response.strip(), "A professional technical architecture diagram of a high-scale distributed system."
+
+    async def get_deep_dive(self, subject: str) -> str:
+        """Returns a deep-dive technical question and answer for a specific subject."""
+        history = HistoryManager.get_history(subject)
+        history_str = "\n".join([f"- {h}" for h in history])
+        
+        prompt = f"""
+        Generate a senior-level technical deep-dive Question and Answer focused entirely on '{subject}'.
+        
+        PREVIOUS TOPICS COVERED (DO NOT REPEAT):
+        {history_str}
+        
+        Provide:
+        - *The Question*: A complex, real-world scenario or conceptual deep-dive related to {subject}.
+        - *The Detailed Answer*: A 500-800 word explanation covering mechanics, trade-offs, and best practices.
+        
+        Format for WhatsApp (use *bold* for headers and list items).
+        """
+        response = await self.llm.generate_response(prompt)
+        
+        first_line = response.split('\n')[0].strip('*')[:100]
+        HistoryManager.add_to_history(subject, first_line)
+        return response.strip()
 
     async def get_curated_content(self, category: str, raw_search_results: str) -> str:
         """Summarizes search results for a specific category while avoiding history."""
