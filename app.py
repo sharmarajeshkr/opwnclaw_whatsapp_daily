@@ -308,7 +308,7 @@ with tab_control:
 # ────────────────────────────────────────────────────────────────────────────
 with tab_logs:
     st.subheader("📜 System Logs")
-    if st.button("刷新", id="refresh_btn"):
+    if st.button("刷新", key="refresh_btn"):
         pass
 
     log_path = os.path.join("data", "bot.log")
