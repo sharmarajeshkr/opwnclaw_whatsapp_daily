@@ -5,8 +5,8 @@ from dotenv import load_dotenv
 from src.agent import InterviewAgent
 from src.whatsapp_client import WhatsAppClient
 from src.scheduler import InterviewScheduler
+from src.config_manager import ConfigManager
 
-# For logging
 import logging
 from src.logger_config import get_logger
 logger = get_logger(os.path.basename(__file__) if "__file__" in locals() else "OpenClawBot")
@@ -15,12 +15,26 @@ logging.basicConfig(level=logging.INFO)
 
 load_dotenv()
 
+
+async def run_user_bot(phone_number: str, agent: InterviewAgent):
+    """Initialize and run WhatsApp bot + scheduler for a single user."""
+    logger.info(f"🚀 Starting bot for user: {phone_number}")
+    whatsapp = WhatsAppClient(phone_number=phone_number)
+    scheduler = InterviewScheduler(agent, whatsapp, phone_number=phone_number)
+    await scheduler.start()
+
+    # Keep this user's task alive
+    while True:
+        await asyncio.sleep(60)
+        logger.debug(f"💓 Heartbeat — {phone_number}")
+
+
 async def main():
-    """Main entry point for the Interview Question WhatsApp Bot."""
+    """Main entry point — spins up a bot for every registered user."""
     logger.info("---------------------------------------------")
-    logger.info("      Interview Bot - OpenClaw      ")
+    logger.info("      OpenClaw Multi-User Bot Daemon         ")
     logger.info("---------------------------------------------")
-    
+
     # Check for API keys
     gemini_key = os.getenv("GEMINI_API_KEY")
     openai_key = os.getenv("OPENAI_API_KEY")
@@ -28,46 +42,33 @@ async def main():
         logger.error("ERROR: Please set GEMINI_API_KEY or OPENAI_API_KEY in .env file.")
         sys.exit(1)
 
-    # Initialize components
+    # Shared agent (stateless, safe to reuse across users)
     agent = InterviewAgent(topic=os.getenv("INTERVIEW_TOPIC", "Software Engineering"))
-    whatsapp = WhatsAppClient(session_name=os.getenv("WHATSAPP_SESSION_NAME", "interview_bot"))
-    
-    # 1. Start WhatsApp connection
-    logger.info("\n---------------------------------------------")
-    logger.info("ACTION REQUIRED: Scan the QR code below!")
-    logger.info("---------------------------------------------")
-    logger.debug("DEBUG: Starting WhatsApp connection...")
-    await whatsapp.connect()
-    
-    # 2. Wait for initialization (QR code scan if needed, and initial sync)
-    logger.debug("DEBUG: Waiting for initialization and background sync sleep(30)...")
-    await asyncio.sleep(30)
-    
-    # 3. Setup and start the daily scheduler
-    logger.info("\nInitializing Daily Scheduler...")
-    scheduler = InterviewScheduler(agent, whatsapp)
-    
-    # Send an initial test message to confirm connection
-    logger.info("\nSending an initial greeting to confirm connection...")
-    await scheduler.daily_task()
-    
-    await scheduler.start()
 
-    
-    # 4. Success message
-    logger.info("\n---------------------------------------------")
-    logger.info("BOT IS ACTIVE AND RUNNING!")
-    logger.info(f"Location: c:\\openClaw_Interview")
-    logger.info(f"Log: Scheduled for {scheduler.schedule_time} daily.")
-    logger.info("---------------------------------------------")
-    
-    # Keep the main thread alive
-    try:
+    # Discover all registered users
+    users = ConfigManager.get_all_users()
+    if not users:
+        logger.warning("⚠️  No users registered yet. Add users via the Streamlit dashboard.")
+        logger.info("Waiting for users to be registered... (polling every 30s)")
         while True:
-            await asyncio.sleep(60)  # Wake up every minute
-            logger.debug("DEBUG: Scheduler heartbeat - Waiting for next daily update...")
+            await asyncio.sleep(30)
+            users = ConfigManager.get_all_users()
+            if users:
+                logger.info(f"✅ Found {len(users)} registered user(s). Starting bots...")
+                break
+
+    logger.info(f"📋 Registered users: {users}")
+
+    # Launch a concurrent task per user
+    tasks = [asyncio.create_task(run_user_bot(phone, agent)) for phone in users]
+
+    logger.info(f"✅ {len(tasks)} user bot(s) active and running!")
+
+    try:
+        await asyncio.gather(*tasks)
     except KeyboardInterrupt:
-        logger.info("\nBot stopped by user.")
+        logger.info("Bot stopped by user.")
+
 
 if __name__ == "__main__":
     try:

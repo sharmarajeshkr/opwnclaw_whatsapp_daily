@@ -7,12 +7,13 @@ logger = get_logger(os.path.basename(__file__) if "__file__" in locals() else "O
 
 
 class ChannelSender:
-    def __init__(self, whatsapp_client):
+    def __init__(self, whatsapp_client, phone_number: str):
         self.whatsapp_client = whatsapp_client
-        self.config = ConfigManager.load_config()
+        self.phone_number = phone_number
+        self.config = ConfigManager.load_config(phone_number)
 
     def refresh_config(self):
-        self.config = ConfigManager.load_config()
+        self.config = ConfigManager.load_config(self.phone_number)
 
     async def send_to_all(self, text: str, image_path: str = None, caption: str = None, title: str = ""):
         """Sends the provided content to all active configurable channels."""
@@ -25,8 +26,6 @@ class ChannelSender:
 
         # WhatsApp
         if channels.get("whatsapp_target"):
-            # Override target if updated from config
-            self.whatsapp_client.phone_number = channels["whatsapp_target"]
             tasks.append(self._send_whatsapp(formatted_text, image_path, caption))
             
         # Telegram

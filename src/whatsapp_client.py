@@ -13,12 +13,30 @@ load_dotenv()
 
 
 class WhatsAppClient:
-    def __init__(self, session_name: str = "interview_bot"):
-        self.phone_number = os.getenv("WHATSAPP_TARGET_NUMBER")
-        self.client = NewAClient(f"{session_name}.sqlite3")
+    def __init__(self, phone_number: str):
+        self.phone_number = phone_number.strip().lstrip("+")
+        
+        # Ensure users directory exists
+        users_dir = os.path.join("data", "users")
+        os.makedirs(users_dir, exist_ok=True)
+        
+        session_path = os.path.join(users_dir, f"{self.phone_number}.sqlite3")
+        self.client = NewAClient(session_path)
         self.connected = False
         self.is_ready = asyncio.Event()
         self.register_internal_handlers()
+        
+        # Intercept QR code and save it
+        def on_qr(client_instance, data_qr: bytes):
+            qr_file = os.path.join("data", f"qr_{self.phone_number}.png")
+            with open(qr_file, "wb") as f:
+                f.write(data_qr)
+            logger.info(f"QR Code generated and saved to {qr_file}")
+            
+        if hasattr(self.client.event, 'qr'):
+            self.client.event.qr(on_qr)
+        elif hasattr(self.client, 'qr'):
+            self.client.qr(on_qr)
 
     def register_internal_handlers(self):
         """Register handlers for connection lifecycle."""
@@ -57,11 +75,10 @@ class WhatsAppClient:
         await self.ensure_connected()
 
         if not self.phone_number:
-            raise ValueError("WHATSAPP_TARGET_NUMBER missing in .env")
+            raise ValueError("phone_number missing for this client")
 
         # Use build_jid directly with the number string; neonize handles the server suffix internally.
-        phone = self.phone_number.strip("+")
-        jid = build_jid(phone)
+        jid = build_jid(self.phone_number)
         
         for attempt in range(retries):
             try:
@@ -81,11 +98,10 @@ class WhatsAppClient:
         await self.ensure_connected()
 
         if not self.phone_number:
-            raise ValueError("WHATSAPP_TARGET_NUMBER missing in .env")
+            raise ValueError("phone_number missing for this client")
 
         # Use build_jid directly with the number string; neonize handles the server suffix internally.
-        phone = self.phone_number.strip("+")
-        jid = build_jid(phone)
+        jid = build_jid(self.phone_number)
 
         if not os.path.exists(image_path):
             logger.error(f"ERROR: Image file not found at {image_path}")

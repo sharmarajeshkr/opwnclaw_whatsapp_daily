@@ -10,16 +10,17 @@ logger = get_logger(os.path.basename(__file__) if "__file__" in locals() else "O
 
 
 class InterviewScheduler:
-    def __init__(self, agent, whatsapp):
+    def __init__(self, agent: InterviewAgent, whatsapp: WhatsAppClient, phone_number: str):
         self.agent = agent
         self.whatsapp = whatsapp
-        self.sender = ChannelSender(whatsapp)
+        self.phone_number = phone_number
+        self.sender = ChannelSender(whatsapp, phone_number)
         self.scheduler = AsyncIOScheduler()
-        self.config = ConfigManager.load_config()
+        self.config = ConfigManager.load_config(phone_number)
         self.schedule_time = self.config.get("schedule_time", "06:00")
 
     async def daily_task(self):
-        logger.info(f"🚀 Starting configuration-driven content delivery cycle")
+        logger.info(f"🚀 [{self.phone_number}] Starting content delivery cycle")
         
         self.sender.refresh_config()
         config = self.sender.config
@@ -60,14 +61,14 @@ class InterviewScheduler:
             content = await self.agent.get_curated_content("Global_news", f"Top global news about {topic_5} for today.")
             await self.sender.send_to_all(content, title=f"Fresh Updates: {topic_5}")
             
-        logger.info("✅ Fresh content loop completed.")
+        logger.info(f"✅ [{self.phone_number}] Content delivery cycle completed.")
 
     async def start(self):
         await self.whatsapp.connect()
         self.whatsapp.register_incoming_handler()
 
-        # Update schedule_time from fresh config before adding job
-        self.config = ConfigManager.load_config()
+        # Reload schedule_time from fresh config before scheduling
+        self.config = ConfigManager.load_config(self.phone_number)
         self.schedule_time = self.config.get("schedule_time", "06:00")
         hour, minute = map(int, self.schedule_time.split(":"))
 
@@ -79,4 +80,6 @@ class InterviewScheduler:
         )
 
         self.scheduler.start()
-        logger.info(f"✅ Scheduler started for daily delivery at {self.schedule_time}")
+        logger.info(f"✅ [{self.phone_number}] Scheduler started — daily delivery at {self.schedule_time}")
+
+

@@ -1,8 +1,9 @@
 import json
 import os
-from typing import Dict, Any
+import glob
+from typing import Dict, Any, List
 
-CONFIG_FILE = "config.json"
+USERS_DIR = os.path.join("data", "users")
 
 DEFAULT_CONFIG = {
     "schedule_time": "20:00",
@@ -14,7 +15,7 @@ DEFAULT_CONFIG = {
         "topic_5": "Latest Global News"
     },
     "channels": {
-        "whatsapp_target": "+919789824976",
+        "whatsapp_target": "", # Dynamic per user
         "telegram_bot_token": "",
         "telegram_chat_id": "",
         "slack_webhook_url": ""
@@ -23,17 +24,30 @@ DEFAULT_CONFIG = {
 
 class ConfigManager:
     @staticmethod
-    def load_config() -> Dict[str, Any]:
-        """Loads configuration from config.json. Creates it with defaults if it doesn't exist."""
-        if not os.path.exists(CONFIG_FILE):
-            ConfigManager.save_config(DEFAULT_CONFIG)
-            return DEFAULT_CONFIG
+    def _ensure_users_dir():
+        if not os.path.exists(USERS_DIR):
+            os.makedirs(USERS_DIR, exist_ok=True)
+
+    @staticmethod
+    def get_config_path(phone_number: str) -> str:
+        ConfigManager._ensure_users_dir()
+        return os.path.join(USERS_DIR, f"{phone_number}_config.json")
+
+    @staticmethod
+    def load_config(phone_number: str) -> Dict[str, Any]:
+        """Loads configuration for a specific user. Creates it with defaults if it doesn't exist."""
+        path = ConfigManager.get_config_path(phone_number)
+        if not os.path.exists(path):
+            default_for_user = DEFAULT_CONFIG.copy()
+            default_for_user["channels"]["whatsapp_target"] = phone_number
+            ConfigManager.save_config(phone_number, default_for_user)
+            return default_for_user
         
         try:
-            with open(CONFIG_FILE, "r") as f:
+            with open(path, "r") as f:
                 config = json.load(f)
                 
-            # Merge with defaults in case of missing keys in an older config
+            # Merge with defaults in case of missing keys
             merged = DEFAULT_CONFIG.copy()
             for k, v in config.items():
                 if isinstance(v, dict) and k in merged:
@@ -42,11 +56,21 @@ class ConfigManager:
                     merged[k] = v
             return merged
         except Exception as e:
-            print(f"Error loading config: {e}. Returning defaults.")
-            return DEFAULT_CONFIG
+            print(f"Error loading config for {phone_number}: {e}. Returning defaults.")
+            default_for_user = DEFAULT_CONFIG.copy()
+            default_for_user["channels"]["whatsapp_target"] = phone_number
+            return default_for_user
 
     @staticmethod
-    def save_config(config: Dict[str, Any]):
-        """Saves configuration to config.json."""
-        with open(CONFIG_FILE, "w") as f:
+    def save_config(phone_number: str, config: Dict[str, Any]):
+        """Saves configuration for a specific user to data/users/<num>_config.json."""
+        path = ConfigManager.get_config_path(phone_number)
+        with open(path, "w") as f:
             json.dump(config, f, indent=4)
+
+    @staticmethod
+    def get_all_users() -> List[str]:
+        """Returns a list of phone numbers of all registered users."""
+        ConfigManager._ensure_users_dir()
+        files = glob.glob(os.path.join(USERS_DIR, "*_config.json"))
+        return [os.path.basename(f).replace("_config.json", "") for f in files]
