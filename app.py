@@ -5,7 +5,7 @@ from src.config_manager import ConfigManager
 
 st.set_page_config(page_title="OpenClaw Bot Configurator", page_icon="🦀", layout="wide")
 
-st.title("🦀 OpenClaw Interview Delivery System")
+st.title("🦀 Articles/Interview Delivery System")
 
 # Load existing configuration
 config = ConfigManager.load_config()
@@ -34,29 +34,34 @@ with tab1:
 
     # ---- CONFIGURATION FORMS ----
     with st.form("config_form"):
-        st.subheader("⏱️ Schedule Time")
-        # Parse HH:MM string into datetime.time object
-        t_hour, t_min = map(int, config.get("schedule_time", "06:00").split(":"))
-        schedule = st.time_input("Daily Delivery Time", value=datetime.time(t_hour, t_min))
+        st.subheader("⏱️ Delivery Schedule & Channels")
+        
+        col_s1, col_s2, col_s3 = st.columns([1, 1, 1])
+        with col_s1:
+            t_hour, t_min = map(int, config.get("schedule_time", "06:00").split(":"))
+            schedule = st.time_input("Daily Delivery Time", value=datetime.time(t_hour, t_min))
+        with col_s2:
+            w_target = st.text_input("WhatsApp Target", value=config["channels"].get("whatsapp_target", "+919789824976"))
+        with col_s3:
+            sl_hook = st.text_input("Slack Webhook URL", value=config["channels"].get("slack_webhook_url", ""))
+
+        col_t1, col_t2 = st.columns(2)
+        with col_t1:
+            tg_token = st.text_input("Telegram Bot Token", value=config["channels"].get("telegram_bot_token", ""))
+        with col_t2:
+            tg_chat = st.text_input("Telegram Chat ID", value=config["channels"].get("telegram_chat_id", ""))
 
         st.subheader("📚 5-Part Content Sequence")
-        st.markdown("Define what the bot should curate today. The sequence is processed in order.")
-        
-        t1 = st.text_input("1. Architecture Challenge (HLD/LLD)", value=config["topics"].get("topic_1", "Architecture Challenge"))
-        t2 = st.text_input("2. Deep Dive Subject 1", value=config["topics"].get("topic_2", "Kafka"))
-        t3 = st.text_input("3. Deep Dive Subject 2", value=config["topics"].get("topic_3", "Agentic AI"))
-        t4 = st.text_input("4. Fresh Updates 1", value=config["topics"].get("topic_4", "AI News"))
-        t5 = st.text_input("5. Fresh Updates 2", value=config["topics"].get("topic_5", "Latest Global News"))
-
-        st.subheader("📡 Delivery Channels")
-        w_target = st.text_input("WhatsApp Target Number", value=config["channels"].get("whatsapp_target", "+919789824976"))
-        
-        st.markdown("*(Upcoming: Telegram & Slack Webhooks)*")
-        tg_token = st.text_input("Telegram Bot Token", value=config["channels"].get("telegram_bot_token", ""))
-        tg_chat = st.text_input("Telegram Chat ID", value=config["channels"].get("telegram_chat_id", ""))
-        sl_hook = st.text_input("Slack Webhook URL", value=config["channels"].get("slack_webhook_url", ""))
-
-        submitted = st.form_submit_button("Save Configuration", type="primary")
+        col_c1, col_c2 = st.columns(2)
+        with col_c1:
+            t1 = st.text_input("1. Architecture Challenge", value=config["topics"].get("topic_1", "Architecture Challenge"))
+            t2 = st.text_input("2. Deep Dive Subject 1", value=config["topics"].get("topic_2", "Kafka"))
+            t3 = st.text_input("3. Deep Dive Subject 2", value=config["topics"].get("topic_3", "Agentic AI"))
+        with col_c2:
+            t4 = st.text_input("4. Fresh Updates 1", value=config["topics"].get("topic_4", "AI News"))
+            t5 = st.text_input("5. Fresh Updates 2", value=config["topics"].get("topic_5", "Latest Global News"))
+            st.markdown("<br>", unsafe_allow_html=True)
+            submitted = st.form_submit_button("💾 Save Configuration", type="primary", use_container_width=True)
 
         if submitted:
             config["schedule_time"] = schedule.strftime("%H:%M")
