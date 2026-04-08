@@ -20,14 +20,16 @@ class WhatsAppClient:
         self.client = NewAClient(session_path)
         self.connected = False
         self.is_ready = asyncio.Event()
+        self.qr_generated = False
         self.register_internal_handlers()
         
         # Setup intercept for QR code and render it as a PNG image
-        def on_qr(client_instance, data_qr: bytes):
+        async def on_qr(client_instance, data_qr: bytes):
             qr_file = os.path.join("data", f"qr_{self.phone_number}.png")
             # Render the QR data into a valid PNG file
             segno.make(data_qr).save(qr_file, scale=10)
-            logger.info(f"QR Code image rendered and saved to {qr_file}")
+            self.qr_generated = True
+            logger.info(f"✅ [{self.phone_number}] QR Code image rendered and saved to {qr_file}. Please scan in WhatsApp.")
             
         if hasattr(self.client.event, 'qr'):
             self.client.event.qr(on_qr)
@@ -38,9 +40,18 @@ class WhatsAppClient:
         """Register handlers for connection lifecycle."""
         @self.client.event(ConnectedEv)
         async def on_connected(client: NewAClient, event: ConnectedEv):
-            logger.debug(f"[{self.phone_number}] ConnectedEv event received.")
+            logger.info(f"✨ [{self.phone_number}] Connected successfully!")
             self.is_ready.set()
             self.connected = True
+            
+            # Remove QR file if it exists after pairing
+            qr_file = os.path.join("data", f"qr_{self.phone_number}.png")
+            if os.path.exists(qr_file):
+                try:
+                    os.remove(qr_file)
+                    logger.debug(f"Deleted QR file {qr_file} after successful pairing.")
+                except Exception as e:
+                    logger.warning(f"Could not delete QR file {qr_file}: {e}")
 
     async def connect(self):
         """Standard connect for NewAClient."""
@@ -56,7 +67,7 @@ class WhatsAppClient:
         # Wait for the ConnectedEv or timeout
         try:
             logger.debug(f"[{self.phone_number}] Waiting for connection signal...")
-            await asyncio.wait_for(self.is_ready.wait(), timeout=60)
+            await asyncio.wait_for(self.is_ready.wait(), timeout=300)
             logger.info(f"✅ [{self.phone_number}] WhatsApp connection ready.")
         except asyncio.TimeoutError:
             logger.error(f"❌ [{self.phone_number}] Timeout waiting for WhatsApp connection.")
