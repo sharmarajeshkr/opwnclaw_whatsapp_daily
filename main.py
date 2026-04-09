@@ -3,6 +3,7 @@ import sys
 import os
 from src.core.env import load_env, get_interview_topic, require_llm_key
 from src.core.config import ConfigManager
+from src.core.db import init_db
 from src.core.logger import get_logger
 from src.content.agent import InterviewAgent
 from src.bot.client import WhatsAppClient
@@ -21,10 +22,16 @@ async def run_user_bot(phone_number: str, shared_topic: str):
     
     await scheduler.start()
 
-    # Keep this user's concurrent task alive
+    # Keep this user's concurrent task alive and monitor connection
     while True:
         await asyncio.sleep(60)
-        logger.debug(f"Heartbeat — {phone_number}")
+        logger.debug(f"Heartbeat — {phone_number} (Connected: {whatsapp.connected})")
+        if not whatsapp.connected:
+            logger.warning(f"🔄 [{phone_number}] Connection drop detected in heartbeat. Reconnecting...")
+            try:
+                await whatsapp.connect()
+            except Exception as e:
+                logger.error(f"❌ [{phone_number}] Reconnect failed: {e}")
 
 import argparse
 
@@ -35,6 +42,9 @@ async def main():
     args = parser.parse_args()
 
     load_env()
+
+    # Initialise the coach SQLite DB (creates coach.db + tables if not present)
+    init_db()
     
     logger.info("---------------------------------------------")
     logger.info("      OpenClaw Multi-User Bot Daemon         ")

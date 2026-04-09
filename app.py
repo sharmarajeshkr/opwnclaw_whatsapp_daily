@@ -172,8 +172,8 @@ with tab_profiles:
                 st.markdown(f"""
                 <div class="user-card">
                     <strong>📱 +{phone}</strong> &nbsp;&nbsp;
-                    <span style="color:rgba(255,255,255,0.5);font-size:0.85rem;">Daily @ {sched}</span><br>
-                    <span style="color:rgba(255,255,255,0.45);font-size:0.8rem;">{topic_list}</span>
+                    <span style="color:rgb(56 26 103);font-size:0.85rem;">Daily @ {sched}</span><br>
+                    <span style="color:rgb(56 26 103);font-size:0.8rem;">{topic_list}</span>
                 </div>
                 """, unsafe_allow_html=True)
             
@@ -183,7 +183,7 @@ with tab_profiles:
                     st.markdown('<span class="badge-active">● Running</span>', unsafe_allow_html=True)
                 else:
                     if paired:
-                        st.markdown('<span class="badge-pending" style="color:rgba(255,255,255,0.2); border-color:rgba(255,255,255,0.1);">○ Stopped</span>', unsafe_allow_html=True)
+                        st.markdown('<span class="badge-pending" style="color:rgb(56 26 103); border-color:rgba(255,255,255,0.1);">○ Stopped</span>', unsafe_allow_html=True)
                     else:
                         st.markdown('<span class="badge-pending">◌ Scan QR</span>', unsafe_allow_html=True)
             

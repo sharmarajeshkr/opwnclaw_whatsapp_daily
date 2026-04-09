@@ -2,7 +2,7 @@ import os
 import asyncio
 from neonize.aioze.client import NewAClient
 from neonize.utils.jid import build_jid
-from neonize.events import ConnectedEv, MessageEv
+from neonize.events import ConnectedEv, MessageEv, DisconnectedEv, LoggedOutEv
 import segno
 from src.core.logger import get_logger
 
@@ -53,28 +53,49 @@ class WhatsAppClient:
                 except Exception as e:
                     logger.warning(f"Could not delete QR file {qr_file}: {e}")
 
-    async def connect(self):
-        """Standard connect for NewAClient."""
+        @self.client.event(DisconnectedEv)
+        async def on_disconnected(client: NewAClient, event: DisconnectedEv):
+            logger.warning(f"⚠️ [{self.phone_number}] WhatsApp disconnected. Connection lost.")
+            self.connected = False
+            self.is_ready.clear()
+
+        @self.client.event(LoggedOutEv)
+        async def on_logged_out(client: NewAClient, event: LoggedOutEv):
+            logger.error(f"❌ [{self.phone_number}] WhatsApp logged out. QR pairing required again.")
+            self.connected = False
+            self.is_ready.clear()
+
+    async def connect(self, retries: int = 3, timeout: int = 90):
+        """Standard connect for NewAClient with robust retry."""
         if self.connected and self.is_ready.is_set():
             return
             
-        logger.info(f"[{self.phone_number}] Initiating WhatsApp connection...")
-        self.is_ready.clear()
-        
-        # Start the connection task
-        asyncio.create_task(self.client.connect())
-        
-        # Wait for the ConnectedEv or timeout
-        try:
-            logger.debug(f"[{self.phone_number}] Waiting for connection signal...")
-            await asyncio.wait_for(self.is_ready.wait(), timeout=300)
-            logger.info(f"✅ [{self.phone_number}] WhatsApp connection ready.")
-        except asyncio.TimeoutError:
-            logger.error(f"❌ [{self.phone_number}] Timeout waiting for WhatsApp connection.")
+        for attempt in range(retries):
+            logger.info(f"[{self.phone_number}] Initiating WhatsApp connection (Attempt {attempt+1}/{retries})...")
+            self.is_ready.clear()
             self.connected = False
+            
+            # Start the connection task
+            connect_task = asyncio.create_task(self.client.connect())
+            
+            # Wait for the ConnectedEv or timeout
+            try:
+                logger.debug(f"[{self.phone_number}] Waiting for connection signal...")
+                await asyncio.wait_for(self.is_ready.wait(), timeout=timeout)
+                logger.info(f"✅ [{self.phone_number}] WhatsApp connection ready.")
+                return
+            except asyncio.TimeoutError:
+                logger.error(f"❌ [{self.phone_number}] Timeout waiting for WhatsApp connection.")
+                connect_task.cancel()
+                await asyncio.sleep(5)
+                
+        # If we exhausted all retries
+        self.connected = False
+        raise ConnectionError(f"Failed to connect WhatsApp client for +{self.phone_number} after {retries} attempts.")
 
     async def ensure_connected(self):
-        if self.connected:
+        """Check connection state and auto-reconnect if needed before action."""
+        if self.connected and self.is_ready.is_set():
             return
         await self.connect()
 
