@@ -6,119 +6,20 @@ import json
 import time
 from src.core.config import ConfigManager, UserConfig
 from src.core.logger import get_logger
+from src.core.utils import (
+    is_bot_running,
+    start_bot,
+    stop_bot,
+    delete_user_data,
+    is_user_paired,
+    trigger_qr_script,
+)
 
 logger = get_logger("StreamlitApp")
 
-# ── Helpers ───────────────────────────────────────────────────────────────────
-def is_bot_running(phone_number: str) -> bool:
-    """Checks if a bot process is running for the given phone number."""
-    try:
-        cmd = f'powershell "Get-WmiObject Win32_Process | Where-Object {{ $_.CommandLine -match \'main.py --phone {phone_number}\' }} | Select-Object ProcessId"'
-        result = subprocess.check_output(cmd, shell=True).decode()
-        # Header is 3 lines, so if > 3 lines, process exists
-        return len(result.strip().split('\n')) >= 3
-    except Exception:
-        return False
-
-def start_bot(phone_number: str):
-    """Starts a bot process for the given phone number."""
-    subprocess.Popen([
-        "powershell", "-Command",
-        f"Start-Process -NoNewWindow .\\venv\\Scripts\\python.exe -ArgumentList 'main.py','--phone',{phone_number}"
-    ])
-
-def stop_bot(phone_number: str):
-    """Stops the bot process for the given phone number."""
-    cmd = f'powershell "Get-WmiObject Win32_Process | Where-Object {{ $_.CommandLine -match \'main.py --phone {phone_number}\' }} | ForEach-Object {{ Stop-Process $_.Handle -Force }}"'
-    subprocess.run(cmd, shell=True)
-
-def delete_user_data(phone_number: str):
-    """Deletes all data associated with a user."""
-    # 1. Config
-    config_path = ConfigManager.get_config_path(phone_number)
-    if os.path.exists(config_path):
-        os.remove(config_path)
-    # 2. Session
-    session_path = os.path.join("data", "users", f"{phone_number}.sqlite3")
-    if os.path.exists(session_path):
-        os.remove(session_path)
-    # 3. QR
-    qr_path = os.path.join("data", f"qr_{phone_number}.png")
-    if os.path.exists(qr_path):
-        os.remove(qr_path)
-    # 4. History
-    history_path = os.path.join("data", "history", f"{phone_number}.json")
-    if os.path.exists(history_path):
-        os.remove(history_path)
-
-def is_user_paired(phone: str) -> bool:
-    """Checks if a user is paired by trusting the sqlite3 session file.
-    
-    The session file is the authoritative source of truth.
-    If a session exists but a stale QR file is still around
-    (e.g., the pairing script died before ConnectedEv cleaned it up),
-    we auto-clean the QR file and report the user as paired.
-    """
-    session_path = os.path.join("data", "users", f"{phone}.sqlite3")
-    qr_path = os.path.join("data", f"qr_{phone}.png")
-    
-    session_exists = os.path.exists(session_path)
-    
-    # If session exists but stale QR is still around, clean it up
-    if session_exists and os.path.exists(qr_path):
-        try:
-            os.remove(qr_path)
-            logger.debug(f"Auto-cleaned stale QR file for {phone} — session already exists.")
-        except Exception:
-            pass
-    
-    return session_exists
-
-def trigger_qr_script(raw: str):
-    """Generates the script to fetch a QR code and runs it."""
-    ConfigManager.load_config(raw)
-    
-    pair_script_path = os.path.join("data", "users", f"pair_{raw}.py")
-    script_content = f"""
-import asyncio
-import os
-import sys
-
-sys.path.append(os.getcwd())
-
-from src.bot.client import WhatsAppClient
-
-async def main():
-    try:
-        c = WhatsAppClient('{raw}')
-        await c.connect()
-    finally:
-        try:
-            os.remove(__file__)
-        except:
-            pass
-
-if __name__ == "__main__":
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    loop.run_until_complete(main())
-"""
-    with open(pair_script_path, "w", encoding="utf-8") as f:
-        f.write(script_content)
-
-    # Stop any old pairing instances
-    kill_cmd = f'powershell "Get-WmiObject Win32_Process | Where-Object {{ $_.CommandLine -match \'pair_{raw}.py\' }} | ForEach-Object {{ Stop-Process $_.Handle -Force }}"'
-    subprocess.run(kill_cmd, shell=True)
-
-    python_exe = os.path.join("venv", "Scripts", "python.exe")
-    if not os.path.exists(python_exe):
-        python_exe = "python"
-        
-    subprocess.Popen(
-        [python_exe, pair_script_path],
-        creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0,
-        cwd=os.getcwd()
-    )
+# ── Helpers imported from src.core.utils ─────────────────────────────────────
+# is_bot_running, start_bot, stop_bot, delete_user_data,
+# is_user_paired, trigger_qr_script are all imported at the top.
 
 
 st.set_page_config(
@@ -434,18 +335,13 @@ if is_system_active:
         col1, col2 = st.columns(2)
         with col1:
             if st.button("🚀 Start ALL Active Bots", use_container_width=True):
-                subprocess.Popen([
-                    "powershell", "-Command",
-                    "Start-Process -NoNewWindow .\\venv\\Scripts\\python.exe main.py"
-                ])
+                from src.core.utils import start_all_bots
+                start_all_bots()
                 st.success("✅ All bots triggered.")
         with col2:
             if st.button("🛑 Stop ALL Active Bots", use_container_width=True):
-                subprocess.run(
-                    'powershell -Command "Get-Process -Name python -ErrorAction SilentlyContinue '
-                    '| Where-Object { $_.CommandLine -match \'main.py\' } | ForEach-Object { Stop-Process $_.Handle -Force }"',
-                    shell=True,
-                )
+                from src.core.utils import stop_all_bots
+                stop_all_bots()
                 st.warning("⏺️ Terminated all bot processes.")
 
         st.divider()
