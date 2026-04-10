@@ -159,10 +159,12 @@ class TestHandleIncoming:
     def _build_fake_message(self, phone: str, text: str):
         """Build a fake neonize MessageEv-like object."""
         msg = MagicMock()
-        msg.Info.MessageSource.Sender = f"{phone}@s.whatsapp.net"
-        msg.Message.Conversation = text
-        msg.Message.ExtendedTextMessage = MagicMock()
-        msg.Message.ExtendedTextMessage.Text = ""
+        sender_mock = MagicMock()
+        sender_mock.User = phone
+        msg.Info.MessageSource.Sender = sender_mock
+        msg.Message.conversation = text
+        msg.Message.extendedTextMessage = MagicMock()
+        msg.Message.extendedTextMessage.text = ""
         return msg
 
     def _build_scheduler(self, isolated_db, eval_result: dict):
@@ -204,9 +206,11 @@ class TestHandleIncoming:
         scheduler = self._build_scheduler(isolated_db, eval_result)
         msg = self._build_fake_message(PHONE, "My answer to nothing")
 
-        # No session set — handle_incoming should return early
+        # No session set — handle_incoming should gracefully reply with fallback
         self.run(scheduler.handle_incoming(None, msg))
-        scheduler.whatsapp.send_message.assert_not_called()
+        scheduler.whatsapp.send_message.assert_called_once()
+        call_arg = scheduler.whatsapp.send_message.call_args[0][0]
+        assert "an active question pending" in call_arg.lower()
 
     def test_active_session_triggers_feedback(self, isolated_db):
         """With active session, valid reply should trigger send_message."""

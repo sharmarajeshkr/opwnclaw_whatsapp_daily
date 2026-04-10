@@ -113,14 +113,15 @@ class InterviewScheduler:
         """
         try:
             # ── Extract sender JID → phone number ──────────────────────
-            sender_jid = str(message_ev.Info.MessageSource.Sender)
-            phone = sender_jid.split("@")[0]
+            # Sender is a JID protobuf, we need its 'User' field
+            sender_jid = message_ev.Info.MessageSource.Sender
+            phone = getattr(sender_jid, "User", "").strip()
 
             # ── Extract plain text ─────────────────────────────────────
             msg = message_ev.Message
             text = (
-                getattr(msg, "Conversation", "")
-                or getattr(getattr(msg, "ExtendedTextMessage", None), "Text", "")
+                getattr(msg, "conversation", "")
+                or getattr(getattr(msg, "extendedTextMessage", None), "text", "")
                 or ""
             ).strip()
 
@@ -133,6 +134,14 @@ class InterviewScheduler:
             session = SessionManager.get_active_session(phone)
             if not session:
                 logger.debug(f"[{phone}] No active session — ignoring reply.")
+                
+                # Send a gentle fallback message so the user knows the bot is alive
+                fallback_msg = (
+                    "🤖 *OpenClaw Coach*\n\n"
+                    "I don't have an active question pending for you right now!\n"
+                    "Wait for your next daily delivery to answer and get scored. 🚀"
+                )
+                await self.whatsapp.send_message(fallback_msg)
                 return
 
             # ── Score with LLM ─────────────────────────────────────────
@@ -236,13 +245,25 @@ class InterviewScheduler:
     # ------------------------------------------------------------------
 
     async def start(self):
-        await self.whatsapp.connect()
+        # Phase 4: Wire the incoming message handler BEFORE connecting
+        # We add a wrapper to log EVERY message event that neonize fires
+        async def raw_message_logger(c, m):
+            try:
+                sender_jid = m.Info.MessageSource.Sender
+                sender = getattr(sender_jid, "User", "Unknown")
+                is_from_me = getattr(m.Info.MessageSource, "IsFromMe", False)
+                text = (getattr(m.Message, "conversation", "") or getattr(getattr(m.Message, "extendedTextMessage", None), "text", "") or "")
+                logger.info(f"RAW MESSAGE EVENT: sender={sender}, is_from_me={is_from_me}, text='{text[:30]}'")
+            except Exception as e:
+                logger.error(f"Error logging raw message: {e}")
+            await self.handle_incoming(c, m)
 
-        # Phase 4: Wire the incoming message handler
         self.whatsapp.register_incoming_handler(
-            handler=lambda c, m: asyncio.create_task(self.handle_incoming(c, m))
+            handler=lambda c, m: asyncio.create_task(raw_message_logger(c, m))
         )
         logger.info(f"[{self.phone_number}] Incoming message handler registered.")
+
+        await self.whatsapp.connect()
 
         self.config = ConfigManager.load_config(self.phone_number)
         self.schedule_time = self.config.schedule_time

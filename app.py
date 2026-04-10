@@ -4,7 +4,9 @@ import datetime
 import os
 import json
 import time
+import pandas as pd
 from src.core.config import ConfigManager, UserConfig
+from src.core.performance import PerformanceTracker
 from src.core.logger import get_logger
 from src.core.utils import (
     is_bot_running,
@@ -119,9 +121,10 @@ is_system_active = len(paired_users) > 0
 
 # ── Tabs ─────────────────────────────────────────────────────────────────────
 if is_system_active:
-    tab_profiles, tab_config, tab_control, tab_logs = st.tabs([
+    tab_profiles, tab_config, tab_performance, tab_control, tab_logs = st.tabs([
         "👥 User Profiles",
         "⚙️ Configure User",
+        "📊 Performance Dashboard",
         "🚀 System Control",
         "📜 Logs",
     ])
@@ -138,81 +141,68 @@ with tab_profiles:
     users = ConfigManager.get_all_users()
 
     if users:
-        # Display a summary table for registered users
-        table_data = []
+        # ── Table Header ──
+        h_col1, h_col2, h_col3, h_col4, h_col5 = st.columns([2, 1.5, 1.5, 3, 2.5])
+        h_col1.markdown("**📱 Phone number**")
+        h_col2.markdown("**Status**")
+        h_col3.markdown("**Schedule**")
+        h_col4.markdown("**Topics**")
+        h_col5.markdown("**Actions**")
+        st.markdown("<hr style='margin-top:0.2rem; margin-bottom:0.8rem;'/>", unsafe_allow_html=True)
+
+        # ── Table Rows ──
         for phone in users:
             cfg = ConfigManager.load_config(phone)
             qr_path = os.path.join("data", f"qr_{phone}.png")
             paired = not os.path.exists(qr_path)
             running = is_bot_running(phone)
-            status = "🟢 Running" if running else ("🟡 Ready (Paired)" if paired else "🟠 Pending QR Scan")
             
-            table_data.append({
-                "Phone": f"+{phone}",
-                "Status": status,
-                "Schedule": cfg.schedule_time or "—",
-                "Subscribed Topics": ", ".join([v for k, v in cfg.topics.model_dump().items() if v]) or "None"
-            })
-        st.dataframe(table_data, use_container_width=True)
-        st.markdown("<br>", unsafe_allow_html=True)
-
-        for phone in users:
-            cfg = ConfigManager.load_config(phone)
             sched = cfg.schedule_time if cfg.schedule_time else "—"
-            topics = cfg.topics
-            active_topics = [v for k, v in topics.model_dump().items() if v]
-            topic_list = ", ".join(active_topics)
-            qr_path = os.path.join("data", f"qr_{phone}.png")
-            paired = not os.path.exists(qr_path)
+            active_topics = [v for k, v in cfg.topics.model_dump().items() if v]
+            topic_str = ", ".join(active_topics) if active_topics else "None"
 
-            col_info, col_status, col_actions = st.columns([4, 1, 3])
-            running = is_bot_running(phone)
+            c1, c2, c3, c4, c5 = st.columns([2, 1.5, 1.5, 3, 2.5])
             
-            with col_info:
-                st.markdown(f"""
-                <div class="user-card">
-                    <strong>📱 +{phone}</strong> &nbsp;&nbsp;
-                    <span style="color:rgb(56 26 103);font-size:0.85rem;">Daily @ {sched}</span><br>
-                    <span style="color:rgb(56 26 103);font-size:0.8rem;">{topic_list}</span>
-                </div>
-                """, unsafe_allow_html=True)
+            c1.markdown(f"+{phone}")
             
-            with col_status:
-                st.markdown("<br>", unsafe_allow_html=True)
-                if running:
-                    st.markdown('<span class="badge-active">● Running</span>', unsafe_allow_html=True)
-                else:
-                    if paired:
-                        st.markdown('<span class="badge-pending" style="color:rgb(56 26 103); border-color:rgba(255,255,255,0.1);">○ Stopped</span>', unsafe_allow_html=True)
-                    else:
-                        st.markdown('<span class="badge-pending">◌ Scan QR</span>', unsafe_allow_html=True)
+            if running:
+                c2.markdown('<span class="badge-active">● Running</span>', unsafe_allow_html=True)
+            elif paired:
+                c2.markdown('<span class="badge-pending" style="color:rgb(168 85 247); border-color:rgba(168,85,247,0.4);">○ Stopped</span>', unsafe_allow_html=True)
+            else:
+                c2.markdown('<span class="badge-pending">◌ Scan QR</span>', unsafe_allow_html=True)
+                
+            c3.markdown(sched)
+            c4.markdown(f"<span style='font-size:0.85rem;'>{topic_str}</span>", unsafe_allow_html=True)
             
-            with col_actions:
-                st.markdown("<br>", unsafe_allow_html=True)
-                c_start, c_stop, c_del = st.columns(3)
-                with c_start:
+            with c5:
+                # Actions within horizontal flex
+                a1, a2, a3 = st.columns([1,1,1])
+                with a1:
                     if not running and paired:
-                        if st.button("▶️", key=f"start_{phone}", help="Start Bot"):
+                        if st.button("▶️", key=f"start_{phone}", help="Start"):
                             start_bot(phone)
                             st.rerun()
                     elif not paired:
-                        if st.button("🔄 QR", key=f"qr_{phone}", help="Generate QR Code for Pairing"):
+                        if st.button("🔄 QR", key=f"qr_{phone}", help="Trigger QR"):
                             trigger_qr_script(phone)
                             st.rerun()
-                with c_stop:
+                with a2:
                     if running:
-                        if st.button("⏹️", key=f"stop_{phone}", help="Stop Bot"):
+                        if st.button("⏹️", key=f"stop_{phone}", help="Stop"):
                             stop_bot(phone)
                             st.rerun()
-                with c_del:
+                with a3:
                     if st.button("🗑️", key=f"del_{phone}", help="Delete User"):
                         delete_user_data(phone)
                         st.rerun()
 
+            st.markdown("<hr style='margin-top:0.4rem; margin-bottom:0.4rem; opacity:0.3;'/>", unsafe_allow_html=True)
+
     else:
         st.info("No users registered yet.")
 
-    st.divider()
+    st.markdown("<br>", unsafe_allow_html=True)
 
     st.subheader("➕ Register New User")
     with st.form("new_user_form", clear_on_submit=True):
@@ -325,7 +315,67 @@ if is_system_active:
                     st.success(f"✅ Saved for +{selected_user}! Restart bot component to apply.")
 
 # ────────────────────────────────────────────────────────────────────────────
-# TAB 3 — SYSTEM CONTROL
+# TAB 3 — PERFORMANCE DASHBOARD
+# ────────────────────────────────────────────────────────────────────────────
+if is_system_active:
+    with tab_performance:
+        st.subheader("📊 User Performance Dashboard")
+        
+        all_users = ConfigManager.get_all_users()
+        if not all_users:
+            st.warning("Please register a user first.")
+        else:
+            selected_perf_user = st.selectbox(
+                "Select User to View Performance",
+                options=all_users,
+                format_func=lambda x: f"+{x}",
+                key="perf_user_select"
+            )
+            
+            perf_data = PerformanceTracker.get_all_time_summary(selected_perf_user)
+            
+            if not perf_data:
+                st.info(f"No performance data recorded yet for +{selected_perf_user}. Complete an interview session first!")
+            else:
+                df = pd.DataFrame(perf_data)
+                
+                # Display high-level metrics
+                col_m1, col_m2, col_m3 = st.columns(3)
+                total_attempts = df["attempts"].sum()
+                avg_overall = df["avg_score"].mean()
+                top_topic = df.loc[df["avg_score"].idxmax()]["topic"]
+                weakest_topic = df.loc[df["avg_score"].idxmin()]["topic"]
+                
+                with col_m1:
+                    st.metric("Total Answers", int(total_attempts))
+                with col_m2:
+                    st.metric("Overall Average Score", f"{avg_overall:.1f} / 10")
+                with col_m3:
+                    st.metric("Strongest Topic", top_topic)
+                
+                st.markdown("---")
+                st.markdown("### Average Score by Topic")
+                
+                # Bar chart for average scores
+                chart_data = df.set_index("topic")[["avg_score"]]
+                # Make sure y-axis max is 10 for scores
+                st.bar_chart(chart_data, height=400, y_label="Average Score (Out of 10)")
+                
+                # Data table
+                st.markdown("### Detailed Breakdown")
+                st.dataframe(
+                    df.rename(columns={
+                        "topic": "Topic", 
+                        "avg_score": "Average Score", 
+                        "attempts": "Total Attempts", 
+                        "min_score": "Min Score", 
+                        "max_score": "Max Score"
+                    }), 
+                    use_container_width=True
+                )
+
+# ────────────────────────────────────────────────────────────────────────────
+# TAB 4 — SYSTEM CONTROL
 # ────────────────────────────────────────────────────────────────────────────
 if is_system_active:
     with tab_control:
@@ -358,7 +408,7 @@ if is_system_active:
             st.dataframe(rows, use_container_width=True)
 
 # ────────────────────────────────────────────────────────────────────────────
-# TAB 4 — LOGS
+# TAB 5 — LOGS
 # ────────────────────────────────────────────────────────────────────────────
 if is_system_active:
     with tab_logs:

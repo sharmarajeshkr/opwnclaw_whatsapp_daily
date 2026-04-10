@@ -102,6 +102,9 @@ def stop_all_bots() -> None:
 
 def delete_user_data(phone_number: str) -> None:
     """Delete all on-disk data associated with a user."""
+    # Stop the bot if it's currently running to release SQLite file locks
+    stop_bot(phone_number)
+    
     paths = [
         ConfigManager.get_config_path(phone_number),
         os.path.join("data", "users", f"{phone_number}.sqlite3"),
@@ -120,24 +123,17 @@ def delete_user_data(phone_number: str) -> None:
 
 def is_user_paired(phone: str) -> bool:
     """
-    Check if a user is paired.  The sqlite3 session file is the single
-    source of truth.  If a stale QR file is still present (e.g. the
-    pairing script crashed before ConnectedEv cleaned it up), it is
-    removed automatically.
+    Check if a user is paired. The sqlite3 session file is created immediately
+    by neonize, so we can't just check its existence. If the qr png is present
+    or missing completely without the DB, they are not paired.
     """
     session_path = os.path.join("data", "users", f"{phone}.sqlite3")
     qr_path = os.path.join("data", f"qr_{phone}.png")
 
     session_exists = os.path.exists(session_path)
 
-    if session_exists and os.path.exists(qr_path):
-        try:
-            os.remove(qr_path)
-            logger.debug(f"Auto-cleaned stale QR file for {phone} - session already exists.")
-        except Exception:
-            pass
-
-    return session_exists
+    # A user is paired only if their session file exists AND they don't have a pending QR scan.
+    return session_exists and not os.path.exists(qr_path)
 
 
 # ── QR / Pairing Script ───────────────────────────────────────────────────────
