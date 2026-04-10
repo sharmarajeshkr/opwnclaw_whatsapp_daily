@@ -159,9 +159,14 @@ class TestHandleIncoming:
     def _build_fake_message(self, phone: str, text: str):
         """Build a fake neonize MessageEv-like object."""
         msg = MagicMock()
-        sender_mock = MagicMock()
-        sender_mock.User = phone
-        msg.Info.MessageSource.Sender = sender_mock
+        
+        # Verify Message Source filters
+        msg.Info.MessageSource.IsFromMe = True
+        
+        chat_mock = MagicMock()
+        chat_mock.User = phone
+        msg.Info.MessageSource.Chat = chat_mock
+        
         msg.Message.conversation = text
         msg.Message.extendedTextMessage = MagicMock()
         msg.Message.extendedTextMessage.text = ""
@@ -193,6 +198,12 @@ class TestHandleIncoming:
             scheduler.agent = agent
             scheduler.whatsapp = wa
             scheduler.phone_number = PHONE
+            
+            # Mock config for handle_incoming filtering
+            config_mock = MagicMock()
+            config_mock.channels.whatsapp_target = PHONE
+            scheduler.config = config_mock
+            
             return scheduler
 
     def run(self, coro):

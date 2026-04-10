@@ -112,10 +112,23 @@ class InterviewScheduler:
           6. Send feedback to user
         """
         try:
-            # ── Extract sender JID → phone number ──────────────────────
-            # Sender is a JID protobuf, we need its 'User' field
-            sender_jid = message_ev.Info.MessageSource.Sender
-            phone = getattr(sender_jid, "User", "").strip()
+            # ── Verify Message Source and Target Chat ──────────────────
+            is_from_me = getattr(message_ev.Info.MessageSource, "IsFromMe", False)
+            chat_jid = getattr(message_ev.Info.MessageSource, "Chat", None)
+            chat_id = getattr(chat_jid, "User", "").strip() if chat_jid else ""
+            
+            target = self.config.channels.whatsapp_target
+            
+            # Ensure the message is in the designated interview chat
+            if chat_id != target:
+                return
+                
+            # Ensure the user sent the message (ignore incoming messages from others if target is someone else)
+            if not is_from_me:
+                return
+
+            # Since the daemon is tied to exactly one user session, we reliably use its own number
+            phone = self.phone_number
 
             # ── Extract plain text ─────────────────────────────────────
             msg = message_ev.Message
