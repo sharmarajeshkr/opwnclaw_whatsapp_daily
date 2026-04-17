@@ -15,9 +15,9 @@ class LLMProvider:
             self.model_name = "gpt-4o-mini"
             self.provider = "openai"
         elif self.gemini_key:
-            import google.generativeai as genai
-            genai.configure(api_key=self.gemini_key)
-            self.model = genai.GenerativeModel('gemini-pro')
+            from google import genai
+            self.gemini_client = genai.Client(api_key=self.gemini_key)
+            self.model_name = 'gemini-2.5-flash'
             self.provider = "gemini"
         else:
             raise ValueError("No API key found for Gemini or OpenAI in environment.")
@@ -28,7 +28,11 @@ class LLMProvider:
         try:
             if self.provider == "gemini":
                 # Google GenAI generation is synchronous, blocking the event loop
-                response = await asyncio.to_thread(self.model.generate_content, prompt)
+                response = await asyncio.to_thread(
+                    self.gemini_client.models.generate_content,
+                    model=self.model_name,
+                    contents=prompt
+                )
                 return response.text
             elif self.provider == "openai":
                 # OpenAI generation is synchronous here (using OpenAI instead of AsyncOpenAI)
