@@ -141,15 +141,14 @@ class InterviewScheduler:
             
             target = self.config.channels.whatsapp_target
             
-            # Ensure the user sent the message (ignore incoming messages from others)
-            if not is_from_me:
-                return
-                
-            # Allow the message if it was sent to the configured target number, 
-            # OR if it's a self-chat (chat_id == sender_id). WhatsApp internal IDs 
-            # for self-chats will match each other.
-            if chat_id != target and chat_id != sender_id:
-                return
+            # The message is a reply to the bot from the target user
+            # We want to process messages that are either:
+            # 1. Sent from the target phone TO the bot (sender_id == target)
+            # 2. Sent by the bot TO the target phone (for self-chat testing, is_from_me=True and chat_id == target)
+            if sender_id != target and not (is_from_me and chat_id == target):
+                # Also allow pure self-chat (talking to "You")
+                if not (is_from_me and chat_id == sender_id):
+                    return
 
             # Since the daemon is tied to exactly one user session, we reliably use its own number
             phone = self.phone_number
@@ -309,26 +308,64 @@ class InterviewScheduler:
         self.config = ConfigManager.load_config(self.phone_number)
         self.schedule_time = self.config.schedule_time
         hour, minute = map(int, self.schedule_time.split(":"))
+        timezone_str = getattr(self.config, "timezone", "UTC")
 
         # Daily content delivery
-        self.scheduler.add_job(
+        self.daily_job = self.scheduler.add_job(
             self.daily_task,
             trigger="cron",
             hour=hour,
             minute=minute,
+            timezone=timezone_str,
         )
 
         # Phase 6: Weekly report — every Sunday at 09:00
-        self.scheduler.add_job(
+        # By default we use the same user's timezone, or leave it hardcoded to 9AM in their timezone
+        self.weekly_job = self.scheduler.add_job(
             self.weekly_report_task,
             trigger="cron",
             day_of_week="sun",
             hour=9,
             minute=0,
+            timezone=timezone_str,
         )
 
         self.scheduler.start()
         logger.info(
             f"✅ [{self.phone_number}] Scheduler started — "
-            f"daily at {self.schedule_time}, weekly report Sundays 09:00"
+            f"daily at {self.schedule_time} ({timezone_str})"
         )
+
+        # Start background task to hot-reload config changes
+        asyncio.create_task(self._watch_config())
+
+    async def _watch_config(self):
+        """Background task that polls for config changes and hot-reloads the scheduler."""
+        while True:
+            await asyncio.sleep(60)  # Check every 1 minute
+            try:
+                new_cfg = ConfigManager.load_config(self.phone_number)
+                new_tz = getattr(new_cfg, "timezone", "UTC")
+                
+                if new_cfg.schedule_time != self.schedule_time or new_tz != getattr(self.config, "timezone", "UTC"):
+                    logger.info(f"🔄 [{self.phone_number}] Config change detected. Hot-reloading scheduler...")
+                    self.config = new_cfg
+                    self.schedule_time = new_cfg.schedule_time
+                    hour, minute = map(int, self.schedule_time.split(":"))
+
+                    self.daily_job.reschedule(
+                        trigger="cron",
+                        hour=hour,
+                        minute=minute,
+                        timezone=new_tz
+                    )
+                    self.weekly_job.reschedule(
+                        trigger="cron",
+                        day_of_week="sun",
+                        hour=9,
+                        minute=0,
+                        timezone=new_tz
+                    )
+                    logger.info(f"✅ [{self.phone_number}] Scheduler hot-reloaded to {self.schedule_time} ({new_tz})")
+            except Exception as e:
+                logger.error(f"Error checking config for hot-reload: {e}")

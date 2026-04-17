@@ -21,6 +21,7 @@ class ChannelsConfig(BaseModel):
 
 class UserConfig(BaseModel):
     schedule_time: str = "20:00"
+    timezone: str = "Asia/Kolkata"
     topics: TopicsConfig = Field(default_factory=TopicsConfig)
     channels: ChannelsConfig = Field(default_factory=ChannelsConfig)
 

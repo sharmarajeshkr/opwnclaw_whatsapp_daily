@@ -4,6 +4,7 @@ import datetime
 import os
 import json
 import time
+import pytz
 import pandas as pd
 from src.core.config import ConfigManager, UserConfig
 from src.core.performance import PerformanceTracker
@@ -270,10 +271,16 @@ if is_system_active:
             config = ConfigManager.load_config(selected_user)
 
             with st.form("user_config_form"):
-                col_s1, col_s2, col_s3 = st.columns([1, 1, 1])
+                col_s1, col_s1a, col_s2, col_s3 = st.columns([1, 1, 1, 1])
                 with col_s1:
                     t_hour, t_min = map(int, config.schedule_time.split(":"))
                     schedule = st.time_input("Daily Delivery Time", value=datetime.time(t_hour, t_min))
+                with col_s1a:
+                    tz_idx = 0
+                    common_tzs = pytz.common_timezones
+                    if config.timezone in common_tzs:
+                        tz_idx = common_tzs.index(config.timezone)
+                    tz_selection = st.selectbox("Timezone", options=common_tzs, index=tz_idx)
                 with col_s2:
                     sl_hook = st.text_input("Slack Webhook URL", value=config.channels.slack_webhook_url)
                 with col_s3:
@@ -300,6 +307,7 @@ if is_system_active:
                 if save_btn:
                     new_cfg = UserConfig(
                         schedule_time=schedule.strftime("%H:%M"),
+                        timezone=tz_selection,
                         topics={
                             "topic_1": t1, "topic_2": t2, "topic_3": t3,
                             "topic_4": t4, "topic_5": t5,
