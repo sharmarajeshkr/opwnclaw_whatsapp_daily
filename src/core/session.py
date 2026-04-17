@@ -3,8 +3,20 @@ session.py
 ----------
 Manages per-user session state stored in the `sessions` table of coach.db.
 
-A "session" represents: "Bot sent this question to this user and is waiting
-for a reply to score." One active session per user at a time.
+QUEUE MODEL (v2 — GAP-04 fix):
+  Previously the table used phone_number as PRIMARY KEY, so INSERT OR REPLACE
+  would overwrite the first deep-dive question the moment the second one was
+  stored. Only the last question ever got scored.
+
+  v2 treats the sessions table as a FIFO queue:
+    - set_active_question()  → appends to the queue (plain INSERT)
+    - get_active_session()   → returns the OLDEST pending row (ORDER BY sent_at ASC)
+    - clear_session(id)      → marks exactly THAT row as answered (by its integer id)
+    - clear_all_stale(phone) → clears ALL pending rows for a user (start of new cycle)
+
+  Result: both daily deep-dive questions are independently stored and scored
+  in arrival order. A user's second reply scores the second question, not the
+  first one again.
 """
 
 from datetime import datetime, timezone
@@ -15,14 +27,16 @@ logger = get_logger("SessionManager")
 
 
 class SessionManager:
-    """CRUD wrapper around the `sessions` table."""
+    """CRUD wrapper around the `sessions` table (v2 queue model)."""
 
     @staticmethod
     def set_active_question(phone: str, question: str, topic: str) -> None:
         """
-        Record a newly sent question for a user.
-        Uses INSERT OR REPLACE so previous unanswered sessions are overwritten
-        (one active question per user at a time).
+        Enqueue a newly sent question for a user.
+
+        Unlike v1 (INSERT OR REPLACE), this is a plain INSERT that allows
+        multiple questions to be pending simultaneously — e.g. the two
+        deep-dive topics sent in one daily cycle.
 
         Args:
             phone:    User's phone number (digits only, no +)
@@ -33,59 +47,82 @@ class SessionManager:
         with get_conn() as conn:
             conn.execute(
                 """
-                INSERT OR REPLACE INTO sessions
+                INSERT INTO sessions
                     (phone_number, question, topic, sent_at, awaiting_reply)
                 VALUES (?, ?, ?, ?, 1)
                 """,
                 (phone, question, topic, now),
             )
-        logger.debug(f"[{phone}] Session set — topic='{topic}'")
+        logger.debug(f"[{phone}] Question enqueued — topic='{topic}'")
 
     @staticmethod
     def get_active_session(phone: str) -> dict | None:
         """
-        Return the current unanswered session for a user, or None.
+        Return the OLDEST unanswered question for a user (FIFO), or None.
 
         Returns:
-            dict with keys {question, topic, sent_at} or None
+            dict with keys {id, question, topic, sent_at} or None.
+            The `id` field must be passed to clear_session() after scoring.
         """
         with get_conn() as conn:
             row = conn.execute(
                 """
-                SELECT question, topic, sent_at
+                SELECT id, question, topic, sent_at
                 FROM sessions
                 WHERE phone_number = ? AND awaiting_reply = 1
+                ORDER BY sent_at ASC
+                LIMIT 1
                 """,
                 (phone,),
             ).fetchone()
         if row:
-            logger.debug(f"[{phone}] Active session found — topic='{row['topic']}'")
+            logger.debug(
+                f"[{phone}] Active session found — topic='{row['topic']}' id={row['id']}"
+            )
             return dict(row)
         return None
 
     @staticmethod
-    def clear_session(phone: str) -> None:
+    def clear_session(session_id: int) -> None:
         """
-        Mark a session as answered (awaiting_reply = 0).
+        Mark one specific question as answered by its database id.
+
         Called after the answer has been scored and feedback sent.
+        Targeting by id (not phone) ensures only the question that was
+        just scored is cleared, leaving any other queued questions intact.
+
+        Args:
+            session_id: The `id` value returned by get_active_session()
         """
         with get_conn() as conn:
             conn.execute(
-                "UPDATE sessions SET awaiting_reply = 0 WHERE phone_number = ?",
-                (phone,),
+                "UPDATE sessions SET awaiting_reply = 0 WHERE id = ?",
+                (session_id,),
             )
-        logger.debug(f"[{phone}] Session cleared.")
+        logger.debug(f"Session id={session_id} cleared.")
 
     @staticmethod
     def clear_all_stale(phone: str) -> None:
         """
-        Force-clear any pending session for a user.
-        Called at the start of each daily_task to avoid a stale session
-        blocking scoring of the new day's question.
+        Force-clear ALL pending questions for a user.
+
+        Called at the start of each daily_task so that unanswered questions
+        from the previous cycle do not linger into the next day's scoring.
         """
         with get_conn() as conn:
             conn.execute(
                 "UPDATE sessions SET awaiting_reply = 0 WHERE phone_number = ?",
                 (phone,),
             )
-        logger.debug(f"[{phone}] Stale sessions cleared before new daily cycle.")
+        logger.debug(f"[{phone}] All stale sessions cleared before new daily cycle.")
+
+    @staticmethod
+    def pending_count(phone: str) -> int:
+        """Return how many questions are currently waiting for a reply."""
+        with get_conn() as conn:
+            row = conn.execute(
+                "SELECT COUNT(*) FROM sessions "
+                "WHERE phone_number = ? AND awaiting_reply = 1",
+                (phone,),
+            ).fetchone()
+        return row[0] if row else 0

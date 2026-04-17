@@ -63,7 +63,7 @@ class TestFullCoachLoop:
             PHONE, session["topic"],
             eval_result["score"], eval_result["weak_aspects"], eval_result["feedback"]
         )
-        SessionManager.clear_session(PHONE)
+        SessionManager.clear_session(session["id"])
 
         # Verify session cleared
         assert SessionManager.get_active_session(PHONE) is None

@@ -23,13 +23,17 @@ class LLMProvider:
             raise ValueError("No API key found for Gemini or OpenAI in environment.")
 
     async def generate_response(self, prompt: str) -> str:
+        import asyncio
         logger.debug(f"Generating response with {self.provider}...")
         try:
             if self.provider == "gemini":
-                response = self.model.generate_content(prompt)
+                # Google GenAI generation is synchronous, blocking the event loop
+                response = await asyncio.to_thread(self.model.generate_content, prompt)
                 return response.text
             elif self.provider == "openai":
-                response = self.client.chat.completions.create(
+                # OpenAI generation is synchronous here (using OpenAI instead of AsyncOpenAI)
+                response = await asyncio.to_thread(
+                    self.client.chat.completions.create,
                     model=self.model_name,
                     messages=[{"role": "user", "content": prompt}]
                 )

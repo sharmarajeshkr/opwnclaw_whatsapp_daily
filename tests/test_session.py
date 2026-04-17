@@ -9,9 +9,9 @@ Covers:
   - get_active_session: returns dict when session exists
   - get_active_session: returns None when no session
   - get_active_session: returns None after session is cleared
-  - clear_session: sets awaiting_reply=0
-  - clear_all_stale: marks all pending sessions done
-  - set_active_question overwrites previous session (INSERT OR REPLACE)
+  - clear_session: sets awaiting_reply=0 for the specific session ID
+  - clear_all_stale: marks all pending sessions done for the phone
+  - set_active_question enqueues multiple sessions (FIFO queue)
   - Isolation: two different phones have independent sessions
 """
 
@@ -60,18 +60,19 @@ class TestSetActiveQuestion:
         conn.close()
         assert row[0] == 1
 
-    def test_overwrites_previous_session(self, isolated_db):
-        """INSERT OR REPLACE — only one row per phone at a time."""
+    def test_enqueues_multiple_sessions(self, isolated_db):
+        """Queue Model — multiple sessions can pend per phone."""
         from src.core.session import SessionManager
         SessionManager.set_active_question(PHONE, "Q1", "Kafka")
         SessionManager.set_active_question(PHONE, "Q2", "Redis")
         conn = sqlite3.connect(isolated_db)
         rows = conn.execute(
-            "SELECT * FROM sessions WHERE phone_number=?", (PHONE,)
+            "SELECT topic FROM sessions WHERE phone_number=? ORDER BY sent_at ASC", (PHONE,)
         ).fetchall()
         conn.close()
-        assert len(rows) == 1
-        assert rows[0][2] == "Redis"  # topic column
+        assert len(rows) == 2
+        assert rows[0][0] == "Kafka"
+        assert rows[1][0] == "Redis"
 
     def test_stored_values_correct(self, isolated_db):
         from src.core.session import SessionManager
@@ -99,6 +100,7 @@ class TestGetActiveSession:
         from src.core.session import SessionManager
         SessionManager.set_active_question(PHONE, QUESTION, TOPIC)
         result = SessionManager.get_active_session(PHONE)
+        assert "id" in result
         assert "question" in result
         assert "topic" in result
         assert "sent_at" in result
@@ -118,7 +120,8 @@ class TestGetActiveSession:
     def test_returns_none_after_clear(self, isolated_db):
         from src.core.session import SessionManager
         SessionManager.set_active_question(PHONE, QUESTION, TOPIC)
-        SessionManager.clear_session(PHONE)
+        session = SessionManager.get_active_session(PHONE)
+        SessionManager.clear_session(session["id"])
         result = SessionManager.get_active_session(PHONE)
         assert result is None
 
@@ -129,10 +132,11 @@ class TestClearSession:
     def test_sets_awaiting_reply_to_zero(self, isolated_db):
         from src.core.session import SessionManager
         SessionManager.set_active_question(PHONE, QUESTION, TOPIC)
-        SessionManager.clear_session(PHONE)
+        session = SessionManager.get_active_session(PHONE)
+        SessionManager.clear_session(session["id"])
         conn = sqlite3.connect(isolated_db)
         row = conn.execute(
-            "SELECT awaiting_reply FROM sessions WHERE phone_number=?", (PHONE,)
+            "SELECT awaiting_reply FROM sessions WHERE id=?", (session["id"],)
         ).fetchone()
         conn.close()
         assert row[0] == 0
@@ -140,7 +144,7 @@ class TestClearSession:
     def test_clear_nonexistent_does_not_raise(self, isolated_db):
         """Clearing a session that doesn't exist should not raise."""
         from src.core.session import SessionManager
-        SessionManager.clear_session("9199999999")  # should not raise
+        SessionManager.clear_session(999999)  # should not raise
 
 
 # ── clear_all_stale ────────────────────────────────────────────────────────────
@@ -181,7 +185,8 @@ class TestMultiUserIsolation:
         from src.core.session import SessionManager
         SessionManager.set_active_question(PHONE, "Q-Kafka", "Kafka")
         SessionManager.set_active_question(PHONE2, "Q-Redis", "Redis")
-        SessionManager.clear_session(PHONE)
+        s1 = SessionManager.get_active_session(PHONE)
+        SessionManager.clear_session(s1["id"])
 
         assert SessionManager.get_active_session(PHONE) is None
         assert SessionManager.get_active_session(PHONE2) is not None

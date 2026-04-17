@@ -8,6 +8,7 @@ from src.core.config import ConfigManager
 from src.core.session import SessionManager
 from src.core.performance import PerformanceTracker
 from src.core.logger import get_logger
+from src.mcp.client import run_medium_query
 
 logger = get_logger("InterviewScheduler")
 
@@ -86,12 +87,30 @@ class InterviewScheduler:
             await self.sender.send_to_all(content, title=f"Fresh Updates: {topics.topic_4}")
             await asyncio.sleep(5)
 
-        # 5. Fresh Updates 2
+        # 5. Fresh Updates 2 (MCP Integration via Medium)
         if topics.topic_5:
-            content = await self.agent.get_curated_content(
-                "Global_news", f"Top global news about {topics.topic_5} for today."
-            )
-            await self.sender.send_to_all(content, title=f"Fresh Updates: {topics.topic_5}")
+            try:
+                # Convert topic string to Medium URL tag format (e.g. 'Artificial Intelligence' -> 'artificial-intelligence')
+                tag = topics.topic_5.lower().replace(' ', '-')
+                mcp_data = await run_medium_query(tag, is_user=False, limit=3)
+                
+                # Have the LLM rewrite the raw MCP output into an engaging WhatsApp digest
+                prompt = (
+                    f"I just pulled the live Medium.com RSS feed for '{topics.topic_5}'. "
+                    f"Here is the raw data from my MCP tools:\n\n{mcp_data}\n\n"
+                    "Please rewrite this into a friendly, structured WhatsApp reading list. "
+                    "Include the exact links so the user can read them. Do not hallucinate any posts."
+                )
+                
+                content = await self.agent.get_curated_content("Medium_updates", prompt)
+                await self.sender.send_to_all(content, title=f"Latest from Medium: {topics.topic_5}")
+            except Exception as e:
+                logger.error(f"MCP Integration Error for {topics.topic_5}: {e}")
+                # Fallback to pure LLM if MCP server crashes
+                content = await self.agent.get_curated_content(
+                    "Global_news", f"Top global news about {topics.topic_5} for today."
+                )
+                await self.sender.send_to_all(content, title=f"Fresh Updates: {topics.topic_5}")
 
         logger.info(f"✅ [{self.phone_number}] Content delivery cycle completed.")
 
@@ -117,14 +136,19 @@ class InterviewScheduler:
             chat_jid = getattr(message_ev.Info.MessageSource, "Chat", None)
             chat_id = getattr(chat_jid, "User", "").strip() if chat_jid else ""
             
+            sender_jid = getattr(message_ev.Info.MessageSource, "Sender", None)
+            sender_id = getattr(sender_jid, "User", "").strip() if sender_jid else ""
+            
             target = self.config.channels.whatsapp_target
             
-            # Ensure the message is in the designated interview chat
-            if chat_id != target:
+            # Ensure the user sent the message (ignore incoming messages from others)
+            if not is_from_me:
                 return
                 
-            # Ensure the user sent the message (ignore incoming messages from others if target is someone else)
-            if not is_from_me:
+            # Allow the message if it was sent to the configured target number, 
+            # OR if it's a self-chat (chat_id == sender_id). WhatsApp internal IDs 
+            # for self-chats will match each other.
+            if chat_id != target and chat_id != sender_id:
                 return
 
             # Since the daemon is tied to exactly one user session, we reliably use its own number
@@ -141,7 +165,7 @@ class InterviewScheduler:
             if not text:
                 return  # Ignore media, stickers, reactions
 
-            logger.info(f"📩 [{phone}] Incoming reply: {text[:80]}...")
+            logger.info(f"📩 [{phone}] Incoming reply: {text}")
 
             # ── Look up active session ─────────────────────────────────
             session = SessionManager.get_active_session(phone)
@@ -173,7 +197,7 @@ class InterviewScheduler:
                 weak_aspects=result["weak_aspects"],
                 feedback=result["feedback"],
             )
-            SessionManager.clear_session(phone)
+            SessionManager.clear_session(session["id"])
 
             # ── Send feedback back to user ─────────────────────────────
             score = result["score"]
@@ -262,11 +286,15 @@ class InterviewScheduler:
         # We add a wrapper to log EVERY message event that neonize fires
         async def raw_message_logger(c, m):
             try:
-                sender_jid = m.Info.MessageSource.Sender
-                sender = getattr(sender_jid, "User", "Unknown")
+                sender_jid = getattr(m.Info.MessageSource, "Sender", None)
+                sender = getattr(sender_jid, "User", "Unknown") if sender_jid else "Unknown"
+                
+                chat_jid = getattr(m.Info.MessageSource, "Chat", None)
+                chat = getattr(chat_jid, "User", "Unknown") if chat_jid else "Unknown"
+                
                 is_from_me = getattr(m.Info.MessageSource, "IsFromMe", False)
                 text = (getattr(m.Message, "conversation", "") or getattr(getattr(m.Message, "extendedTextMessage", None), "text", "") or "")
-                logger.info(f"RAW MESSAGE EVENT: sender={sender}, is_from_me={is_from_me}, text='{text[:30]}'")
+                logger.info(f"RAW MESSAGE EVENT: chat={chat}, sender={sender}, is_from_me={is_from_me}, text='{text[:30]}'")
             except Exception as e:
                 logger.error(f"Error logging raw message: {e}")
             await self.handle_incoming(c, m)

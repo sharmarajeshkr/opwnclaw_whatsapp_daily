@@ -23,6 +23,8 @@ from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
 from src.core.config import ConfigManager, UserConfig, TopicsConfig, ChannelsConfig
+from src.core.performance import PerformanceTracker
+from src.core.session import SessionManager
 from src.core.utils import (
     is_bot_running,
     is_user_paired,
@@ -116,6 +118,29 @@ def user_status(phone: str):
     phone = _clean_phone(phone)
     _require_user(phone)
     return get_user_status(phone)
+
+
+@router.get("/api/users/{phone}/session", tags=["Session"])
+def get_session(phone: str):
+    """Get the current active interview session for a user."""
+    phone = _clean_phone(phone)
+    _require_user(phone)
+    
+    session = SessionManager.get_active_session(phone)
+    if not session:
+        return {"active": False, "message": "No active question pending.", "session": None}
+    
+    return {"active": True, "session": session}
+
+
+@router.get("/api/users/{phone}/performance", tags=["Performance"])
+def get_performance(phone: str):
+    """Get all-time performance statistics for a user."""
+    phone = _clean_phone(phone)
+    _require_user(phone)
+    
+    perf = PerformanceTracker.get_all_time_summary(phone)
+    return {"performance": perf, "total_topics_scored": len(perf)}
 
 
 @router.get("/api/users/{phone}/config", tags=["Config"])
