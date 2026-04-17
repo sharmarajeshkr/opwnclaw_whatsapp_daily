@@ -1,19 +1,18 @@
-openclaw[full]>=2026.3.20
-tenacity
-python-dotenv
+# Core Dependencies
+pydantic>=2.0
 apscheduler
 openai
 google-generativeai
-structlog
-pydantic>=2.0
-asyncio
-aiohttp
-linkify-it-py<3
-markdown-it-py[linkify]>=2.1.0
-textual>=0.50.0
-cmdop
-wcwidth
-rich
-pyte
-grpcio
-uc-micro-py
+python-dotenv
+httpx
+streamlit
+neonize>=0.3.16.post0
+fastapi
+uvicorn[standard]
+psutil
+
+# Dev Dependencies
+pytest
+black
+isort
+flake8
