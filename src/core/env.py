@@ -37,3 +37,7 @@ def get_api_secret_key() -> str | None:
 def get_fernet_key() -> str | None:
     load_env()
     return os.getenv("FERNET_KEY")
+
+def get_admin_password() -> str | None:
+    load_env()
+    return os.getenv("ADMIN_PASSWORD")
