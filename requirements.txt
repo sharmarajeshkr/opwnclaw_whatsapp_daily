@@ -10,6 +10,7 @@ neonize>=0.3.16.post0
 fastapi
 uvicorn[standard]
 psutil
+cryptography
 
 # Dev Dependencies
 pytest

@@ -3,6 +3,8 @@ import os
 import glob
 from typing import Dict, Any, List
 from pydantic import BaseModel, Field
+from cryptography.fernet import Fernet
+from src.core.env import get_fernet_key
 
 USERS_DIR = os.path.join("data", "users")
 
@@ -37,6 +39,43 @@ class ConfigManager:
         return os.path.join(USERS_DIR, f"{phone_number}_config.json")
 
     @staticmethod
+    def _get_fernet() -> Fernet | None:
+        key = get_fernet_key()
+        if not key:
+            return None
+        return Fernet(key.encode("utf-8"))
+
+    @staticmethod
+    def _encrypt_dict(data: dict) -> dict:
+        fernet = ConfigManager._get_fernet()
+        if not fernet:
+            return data
+        
+        channels = data.get("channels", {})
+        if "telegram_bot_token" in channels and channels["telegram_bot_token"]:
+            channels["telegram_bot_token"] = fernet.encrypt(channels["telegram_bot_token"].encode("utf-8")).decode("utf-8")
+        if "slack_webhook_url" in channels and channels["slack_webhook_url"]:
+            channels["slack_webhook_url"] = fernet.encrypt(channels["slack_webhook_url"].encode("utf-8")).decode("utf-8")
+        return data
+
+    @staticmethod
+    def _decrypt_dict(data: dict) -> dict:
+        fernet = ConfigManager._get_fernet()
+        if not fernet:
+            return data
+            
+        channels = data.get("channels", {})
+        for key in ["telegram_bot_token", "slack_webhook_url"]:
+            if key in channels and channels[key]:
+                try:
+                    # Only decrypt if it looks like a Fernet token (starts with 'gAAAAA')
+                    if channels[key].startswith("gAAAAA"):
+                        channels[key] = fernet.decrypt(channels[key].encode("utf-8")).decode("utf-8")
+                except Exception:
+                    pass
+        return data
+
+    @staticmethod
     def load_config(phone_number: str) -> UserConfig:
         """Loads configuration for a specific user. Creates it with defaults if it doesn't exist."""
         path = ConfigManager.get_config_path(phone_number)
@@ -49,6 +88,7 @@ class ConfigManager:
         try:
             with open(path, "r") as f:
                 data = json.load(f)
+            data = ConfigManager._decrypt_dict(data)
             return UserConfig.model_validate(data)
         except Exception as e:
             from src.core.logger import get_logger
@@ -66,6 +106,9 @@ class ConfigManager:
             data = config.model_dump()
         else:
             data = config
+            
+        # Standardise and encrypt
+        data = ConfigManager._encrypt_dict(data)
             
         with open(path, "w") as f:
             json.dump(data, f, indent=4)

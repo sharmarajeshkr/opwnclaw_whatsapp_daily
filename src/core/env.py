@@ -26,18 +26,14 @@ def require_llm_key() -> str:
         return gemini_key
     raise ValueError("Neither OPENAI_API_KEY nor GEMINI_API_KEY is set in the environment.")
 
-def get_whatsapp_target_number() -> str | None:
-    load_env()
-    return os.getenv("WHATSAPP_TARGET_NUMBER")
-
-def get_whatsapp_session_name() -> str:
-    load_env()
-    return os.getenv("WHATSAPP_SESSION_NAME", "interview_bot")
-
-def get_schedule_time() -> str:
-    load_env()
-    return os.getenv("SCHEDULE_TIME", "06:00")
-
 def get_interview_topic() -> str:
     load_env()
     return os.getenv("INTERVIEW_TOPIC", "Software Engineering")
+
+def get_api_secret_key() -> str | None:
+    load_env()
+    return os.getenv("API_SECRET_KEY")
+
+def get_fernet_key() -> str | None:
+    load_env()
+    return os.getenv("FERNET_KEY")
