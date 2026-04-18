@@ -17,7 +17,11 @@ class WhatsAppClient:
         os.makedirs(users_dir, exist_ok=True)
         
         session_path = os.path.join(users_dir, f"{self.phone_number}.sqlite3")
-        self.client = NewAClient(session_path)
+        from neonize.proto.waCompanionReg.WAWebProtobufsCompanionReg_pb2 import DeviceProps
+        self.client = NewAClient(
+            session_path, 
+            props=DeviceProps(os="Mac OS")
+        )
         self.connected = False
         self.is_ready = asyncio.Event()
         self.qr_generated = False

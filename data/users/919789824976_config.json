@@ -1,0 +1,18 @@
+{
+    "schedule_time": "23:30",
+    "timezone": "Asia/Kolkata",
+    "pin_code": "7777",
+    "topics": {
+        "topic_1": "Architecture Challenge",
+        "topic_2": "Kafka",
+        "topic_3": "Agentic AI",
+        "topic_4": "AI News",
+        "topic_5": "Latest Global News"
+    },
+    "channels": {
+        "whatsapp_target": "919789824976",
+        "telegram_bot_token": "",
+        "telegram_chat_id": "",
+        "slack_webhook_url": ""
+    }
+}

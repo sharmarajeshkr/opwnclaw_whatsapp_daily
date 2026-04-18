@@ -36,8 +36,15 @@ st.set_page_config(
 st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/icon?family=Material+Icons');
 
 html, body, [class*="st-"] { font-family: 'Inter', sans-serif; }
+
+/* Hide the broken sidebar collapse/expand button */
+button[data-testid="collapsedControl"],
+section[data-testid="stSidebarCollapsedControl"] {
+    display: none !important;
+}
 
 /* Dark glassmorphism cards */
 .glass-card {
@@ -128,34 +135,59 @@ if "auth_user" not in st.session_state:
 
 if not st.session_state.authenticated:
     st.markdown('<div class="glass-card">', unsafe_allow_html=True)
-    st.subheader("🔒 Dashboard Login")
-    login_phone = st.text_input("Phone Number (Leave blank for Admin)", placeholder="e.g. 919876543210")
-    login_pass = st.text_input("Password / PIN", type="password")
+    tab_login, tab_register = st.tabs(["🔒 Login", "➕ Register New User"])
     
-    if st.button("Login", type="primary"):
-        admin_pass = get_admin_password()
+    with tab_login:
+        st.subheader("Welcome Back")
+        login_phone = st.text_input("Phone Number (Leave blank for Admin)", placeholder="e.g. 919876543210")
+        login_pass = st.text_input("Password / PIN", type="password")
         
-        if not login_phone.strip():
-            if admin_pass and login_pass == admin_pass:
-                st.session_state.authenticated = True
-                st.session_state.role = "ADMIN"
-                st.rerun()
-            else:
-                st.error("Invalid Admin password.")
-        else:
-            phone_clean = login_phone.strip().lstrip("+")
-            users = ConfigManager.get_all_users()
-            if phone_clean in users:
-                cfg = ConfigManager.load_config(phone_clean)
-                if login_pass == getattr(cfg, "pin_code", "0000"):
+        if st.button("Login", type="primary", use_container_width=True):
+            admin_pass = get_admin_password()
+            
+            if not login_phone.strip():
+                if admin_pass and login_pass == admin_pass:
                     st.session_state.authenticated = True
-                    st.session_state.role = "USER"
-                    st.session_state.auth_user = phone_clean
+                    st.session_state.role = "ADMIN"
                     st.rerun()
                 else:
-                    st.error("Invalid PIN.")
+                    st.error("Invalid Admin password.")
             else:
-                st.error("Phone number not registered.")
+                phone_clean = login_phone.strip().lstrip("+")
+                users = ConfigManager.get_all_users()
+                if phone_clean in users:
+                    cfg = ConfigManager.load_config(phone_clean)
+                    if login_pass == getattr(cfg, "pin_code", "0000"):
+                        st.session_state.authenticated = True
+                        st.session_state.role = "USER"
+                        st.session_state.auth_user = phone_clean
+                        st.rerun()
+                    else:
+                        st.error("Invalid PIN.")
+                else:
+                    st.error("Phone number not registered.")
+                    
+    with tab_register:
+        st.subheader("Join OpenClaw")
+        reg_phone = st.text_input("Your Mobile Number (with country code)", placeholder="e.g. +919876543210")
+        reg_pin = st.text_input("Set a 4-Digit PIN", type="password", max_chars=4)
+        
+        if st.button("Create Account", type="primary", use_container_width=True):
+            phone_clean = reg_phone.strip().lstrip("+")
+            if not phone_clean.isdigit():
+                st.error("Please enter a valid phone number with country code.")
+            elif not reg_pin:
+                st.error("Please set a PIN.")
+            elif phone_clean in ConfigManager.get_all_users():
+                st.warning("This phone number is already registered! Please login.")
+            else:
+                # Create default config for the new user
+                from src.core.config import UserConfig, ChannelsConfig
+                default_channels = ChannelsConfig(whatsapp_target=phone_clean)
+                new_cfg = UserConfig(channels=default_channels, pin_code=reg_pin)
+                ConfigManager.save_config(phone_clean, new_cfg)
+                st.success(f"Account for +{phone_clean} created successfully! You can now login.")
+                
     st.markdown('</div>', unsafe_allow_html=True)
     st.stop()
 
@@ -169,12 +201,46 @@ if st.sidebar.button("Logout"):
     st.rerun()
 
 
-# ── Global Pairing Check ─────────────────────────────────────────────────────
-paired_users = [u for u in ConfigManager.get_all_users() if is_user_paired(u)]
-is_system_active = len(paired_users) > 0
+# ── Early Pairing Gate for USER ──────────────────────────────────────────────
+# If a USER just registered but hasn't scanned QR yet, show the pairing screen
+# as the ONLY thing on the page — no other tabs until they are paired.
+if st.session_state.role == "USER":
+    user_phone = st.session_state.auth_user
+    if not is_user_paired(user_phone):
+        st.markdown('<div class="glass-card">', unsafe_allow_html=True)
+        st.markdown('<p class="hero-title" style="font-size:1.4rem;">📱 Pair Your WhatsApp</p>', unsafe_allow_html=True)
+        st.markdown("Before we can send you interview content, you need to link your WhatsApp account by scanning a QR code.")
+        st.markdown("---")
+
+        qr_path = os.path.join("data", f"qr_{user_phone}.png")
+
+        if os.path.exists(qr_path):
+            st.success("✅ QR Code is ready! Open WhatsApp → **Linked Devices** → **Link a Device** and scan below.")
+            st.image(qr_path, caption=f"QR for +{user_phone}", width=300)
+            if st.button("🔄 I've scanned it — check status", use_container_width=True):
+                st.rerun()
+        else:
+            st.info("Click the button below to generate your personal QR code.")
+            if st.button("🔲 Generate My QR Code", type="primary", use_container_width=True):
+                trigger_qr_script(user_phone)
+                import time
+                time.sleep(3)
+                st.rerun()
+
+        st.markdown('</div>', unsafe_allow_html=True)
+        st.stop()
+    else:
+        # User IS paired — make sure their bot is running
+        if not is_bot_running(user_phone):
+            start_bot(user_phone)
+
 
 # ── Tabs ─────────────────────────────────────────────────────────────────────
 tab_profiles = tab_config = tab_performance = tab_control = tab_logs = None
+
+# Global pairing check (for ADMIN system status)
+paired_users = [u for u in ConfigManager.get_all_users() if is_user_paired(u)]
+is_system_active = len(paired_users) > 0
 
 if st.session_state.role == "ADMIN":
     if is_system_active:
@@ -333,6 +399,45 @@ if tab_config is not None:
             else:
                 selected_user = st.session_state.auth_user
                 st.markdown(f"**Editing Profile:** +{selected_user}")
+                
+                st.markdown("---")
+                st.subheader("📱 WhatsApp Pairing & Status")
+                
+                qr_path = os.path.join("data", f"qr_{selected_user}.png")
+                paired = not os.path.exists(qr_path)
+                running = is_bot_running(selected_user)
+                
+                c_stat, c_act1, c_act2 = st.columns([2, 1, 1])
+                with c_stat:
+                    if running:
+                        st.markdown('<span class="badge-active">● Running</span>', unsafe_allow_html=True)
+                    elif paired:
+                        st.markdown('<span class="badge-pending" style="color:rgb(168 85 247); border-color:rgba(168,85,247,0.4);">○ Stopped</span>', unsafe_allow_html=True)
+                    else:
+                        st.markdown('<span class="badge-pending">◌ Scan QR</span>', unsafe_allow_html=True)
+                
+                with c_act1:
+                    if not running and paired:
+                        if st.button("▶️ Start Engine", key=f"user_start_{selected_user}", use_container_width=True):
+                            start_bot(selected_user)
+                            st.rerun()
+                    elif not paired:
+                        if st.button("🔄 Generate QR", key=f"user_qr_{selected_user}", use_container_width=True):
+                            trigger_qr_script(selected_user)
+                            st.rerun()
+                with c_act2:
+                    if running:
+                        if st.button("⏹️ Stop Engine", key=f"user_stop_{selected_user}", use_container_width=True):
+                            stop_bot(selected_user)
+                            st.rerun()
+                            
+                if not paired:
+                    st.info("To pair your WhatsApp, click 'Generate QR'. Once it appears, scan it using WhatsApp > Linked Devices.")
+                    if os.path.exists(qr_path):
+                        st.image(qr_path, caption=f"QR Code for +{selected_user}", width=300)
+                    else:
+                        st.warning("QR is initializing or not requested. Wait a few seconds and page your refresh.")
+                st.markdown("---")
             
             config = ConfigManager.load_config(selected_user)
 
@@ -374,7 +479,7 @@ if tab_config is not None:
                     t3 = st.text_input("3. Deep Dive Subject 2", value=config.topics.topic_3)
                 with col_c2:
                     t4 = st.text_input("4. Fresh Updates 1", value=config.topics.topic_4)
-                    t5 = st.text_input("5. Fresh Updates 2", value=config.topics.topic_5)
+                    t5 = st.text_input("5. Details from Medium ", value=config.topics.topic_5)
                     st.markdown("<br>", unsafe_allow_html=True)
                     save_btn = st.form_submit_button("💾 Save Configuration", type="primary", use_container_width=True)
 
