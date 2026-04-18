@@ -36,7 +36,8 @@ CREATE TABLE IF NOT EXISTS sessions (
     question        TEXT NOT NULL,
     topic           TEXT NOT NULL,
     sent_at         TEXT NOT NULL,
-    awaiting_reply  INTEGER DEFAULT 1
+    awaiting_reply  INTEGER DEFAULT 1,
+    follow_up_count INTEGER DEFAULT 0
 );
 """
 
@@ -60,6 +61,8 @@ CREATE TABLE IF NOT EXISTS user_configs (
     pin_code        TEXT DEFAULT '0000',
     topics          JSONB NOT NULL DEFAULT '{}',
     channels        JSONB NOT NULL DEFAULT '{}',
+    level           TEXT DEFAULT 'Beginner',
+    skill_profile   JSONB NOT NULL DEFAULT '{"backend": 5, "system_design": 5, "ai": 5}',
     created_at      TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at      TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
@@ -79,6 +82,8 @@ _CREATE_USER_STATUS = """
 CREATE TABLE IF NOT EXISTS user_status (
     phone_number    TEXT PRIMARY KEY,
     is_paired       BOOLEAN DEFAULT FALSE,
+    current_streak  INTEGER DEFAULT 0,
+    last_reply_at   TIMESTAMP WITH TIME ZONE,
     updated_at      TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 """
@@ -130,6 +135,10 @@ def init_db() -> None:
         conn.execute(_CREATE_USER_CONFIGS)
         conn.execute(_CREATE_USER_HISTORY)
         conn.execute(_CREATE_USER_STATUS)
+        conn.execute("ALTER TABLE user_configs ADD COLUMN IF NOT EXISTS skill_profile JSONB NOT NULL DEFAULT '{\"backend\": 5, \"system_design\": 5, \"ai\": 5}'")
+        conn.execute("ALTER TABLE sessions ADD COLUMN IF NOT EXISTS follow_up_count INTEGER DEFAULT 0")
+        conn.execute("ALTER TABLE user_status ADD COLUMN IF NOT EXISTS current_streak INTEGER DEFAULT 0")
+        conn.execute("ALTER TABLE user_status ADD COLUMN IF NOT EXISTS last_reply_at TIMESTAMP WITH TIME ZONE")
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_sessions_phone_reply "
             "ON sessions(phone_number, awaiting_reply)"

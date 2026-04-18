@@ -231,7 +231,16 @@ if not st.session_state.authenticated:
 
 st.sidebar.markdown(f"**Logged in as:** {st.session_state.role}")
 if st.session_state.role == "USER":
-    st.sidebar.markdown(f"**Profile:** +{st.session_state.auth_user}")
+    user_phone = st.session_state.auth_user
+    # Fetch streak for display
+    from src.core.db import get_conn
+    with get_conn() as conn:
+        row = conn.execute("SELECT current_streak FROM user_status WHERE phone_number = %s", (user_phone,)).fetchone()
+        streak = row["current_streak"] if row else 0
+    
+    st.sidebar.markdown(f"**Profile:** +{user_phone}")
+    if (streak or 0) > 0:
+        st.sidebar.markdown(f"🔥 **{streak} Day Streak**")
 if st.sidebar.button("Logout"):
     st.session_state.authenticated = False
     st.session_state.role = None
@@ -274,7 +283,7 @@ if st.session_state.role == "USER":
 
 
 # ── Tabs ─────────────────────────────────────────────────────────────────────
-tab_profiles = tab_config = tab_performance = tab_control = tab_logs = None
+tab_profiles = tab_config = tab_performance = tab_leaderboard = tab_control = tab_logs = None
 
 # Global pairing check (for ADMIN system status)
 paired_users = [u for u in ConfigManager.get_all_users() if is_user_paired(u)]
@@ -282,10 +291,11 @@ is_system_active = len(paired_users) > 0
 
 if st.session_state.role == "ADMIN":
     if is_system_active:
-        tab_profiles, tab_config, tab_performance, tab_control, tab_logs = st.tabs([
+        tab_profiles, tab_config, tab_performance, tab_leaderboard, tab_control, tab_logs = st.tabs([
             "👥 User Profiles",
             "⚙️ Configure User",
             "📊 Performance Dashboard",
+            "🏆 Hall of Fame",
             "🚀 System Control",
             "📜 Logs",
         ])
@@ -293,9 +303,10 @@ if st.session_state.role == "ADMIN":
         tab_profiles, = st.tabs(["👥 User Registration & Pairing"])
         st.info("👋 Welcome! Please register and pair at least one WhatsApp account to unlock the full dashboard.")
 elif st.session_state.role == "USER":
-    tab_config, tab_performance = st.tabs([
+    tab_config, tab_performance, tab_leaderboard = st.tabs([
         "⚙️ My Configuration",
         "📊 My Performance",
+        "🏆 Leaderboard",
     ])
 
 # ────────────────────────────────────────────────────────────────────────────
@@ -506,6 +517,11 @@ if tab_config is not None:
                     if config.timezone in common_tzs:
                         tz_idx = common_tzs.index(config.timezone)
                     tz_selection = st.selectbox("Timezone", options=common_tzs, index=tz_idx)
+                
+                with col_s2:
+                     level_options = ["Beginner", "Intermediate", "Advanced"]
+                     curr_lvl_idx = level_options.index(config.level) if config.level in level_options else 0
+                     level_selection = st.selectbox("Learning Level", options=level_options, index=curr_lvl_idx, help="Tailors the complexity of delivered content.")
             
                 if st.session_state.role == "ADMIN":
                     with col_s2:
@@ -522,7 +538,20 @@ if tab_config is not None:
                     tg_token = config.channels.telegram_bot_token
                     tg_chat = config.channels.telegram_chat_id
                     pin = getattr(config, "pin_code", "0000")
+                    # Level is always editable for the user in the new UI section above
 
+                st.markdown("---")
+                st.subheader("🚀 My Skill Profile")
+                st.caption("Rate your proficiency (0-10) to help the bot adapt content complexity specifically to your strengths.")
+                
+                c_prof1, c_prof2, c_prof3 = st.columns(3)
+                with c_prof1:
+                    prof_backend = st.slider("Backend", 0, 10, config.skill_profile.get("backend", 5), key="prof_backend")
+                with c_prof2:
+                    prof_sd = st.slider("System Design", 0, 10, config.skill_profile.get("system_design", 5), key="prof_sd")
+                with c_prof3:
+                    prof_ai = st.slider("AI", 0, 10, config.skill_profile.get("ai", 5), key="prof_ai")
+                
                 st.markdown("---")
                 st.subheader("📚 Topic Schedule")
 
@@ -538,16 +567,16 @@ if tab_config is not None:
                     horizontal=True,
                     help="Global: all topics fire at the same time. Per-Topic: each topic has its own delivery time.",
                 )
-                is_per_topic = schedule_mode.startswith("🕐")
+                is_per_topic = "different time per topic" in schedule_mode
 
                 if is_per_topic:
                     st.caption("Set a custom delivery time per topic. Leave blank to fall back to the Default Time above.")
                 else:
-                    st.caption(f"All topics will be delivered as one batch at the Default Delivery Time above.")
+                    st.caption("All topics will be delivered as one batch at the Default Delivery Time above.")
 
                 # Table header — hide time column in Global mode
                 if is_per_topic:
-                    th_topic, th_label, th_time = st.columns([2, 3, 1])
+                    th_topic, th_label, th_time = st.columns([1.5, 2.5, 1])
                     th_topic.markdown("**Topic**")
                     th_label.markdown("**Subject / Label**")
                     th_time.markdown("**Time (HH:MM)**")
@@ -566,7 +595,7 @@ if tab_config is not None:
                 topic_values = {}
                 for n, label in TOPIC_DEFS:
                     if is_per_topic:
-                        c_topic, c_label, c_time = st.columns([2, 3, 1])
+                        c_topic, c_label, c_time = st.columns([1.5, 2.5, 1])
                     else:
                         c_topic, c_label = st.columns([2, 3])
                     with c_topic:
@@ -621,6 +650,7 @@ if tab_config is not None:
                     if not time_error:
                         new_cfg = UserConfig(
                             schedule_time=global_t,
+                            level=level_selection,
                             timezone=tz_selection,
                             pin_code=pin,
                             topics={
@@ -629,6 +659,11 @@ if tab_config is not None:
                                 "topic_3": topic_values["t3"], "topic_3_time": topic_values["t3_time"],
                                 "topic_4": topic_values["t4"], "topic_4_time": topic_values["t4_time"],
                                 "topic_5": topic_values["t5"], "topic_5_time": topic_values["t5_time"],
+                            },
+                            skill_profile={
+                                "backend": prof_backend,
+                                "system_design": prof_sd,
+                                "ai": prof_ai
                             },
                             channels={
                                 "whatsapp_target": selected_user,
@@ -681,6 +716,22 @@ if tab_performance is not None:
                     st.metric("Overall Average Score", f"{avg_overall:.1f} / 10")
                 with col_m3:
                     st.metric("Strongest Topic", top_topic)
+                
+                # Progression Metric
+                st.markdown("---")
+                c_p1, c_p2 = st.columns(2)
+                
+                now = datetime.datetime.now(datetime.timezone.utc)
+                start_date = config.created_at
+                if start_date.tzinfo is None:
+                     start_date = start_date.replace(tzinfo=datetime.timezone.utc)
+                delta = now - start_date
+                week_num = (delta.days // 7) + 1
+                
+                with c_p1:
+                     st.markdown(f"### 🏆 Current Level: **{config.level}**")
+                with c_p2:
+                     st.markdown(f"### 📅 Progression: **Week {week_num}**")
             
                 st.markdown("---")
                 st.markdown("### Average Score by Topic")
@@ -689,16 +740,26 @@ if tab_performance is not None:
                 chart_data = df.set_index("topic")[["avg_score"]]
                 # Make sure y-axis max is 10 for scores
                 st.bar_chart(chart_data, height=400, y_label="Average Score (Out of 10)")
-            
-                # Data table
+                
+                    # Data table
                 st.markdown("### Detailed Breakdown")
+                
+                # Add Mastery column logic
+                def check_mastery(row):
+                     if config.level == "Advanced" and row["avg_score"] >= 9.0:
+                          return "💎 Advanced Mastery"
+                     return "—"
+                
+                df["Mastery"] = df.apply(check_mastery, axis=1)
+                
                 st.dataframe(
                     df.rename(columns={
                         "topic": "Topic", 
                         "avg_score": "Average Score", 
                         "attempts": "Total Attempts", 
                         "min_score": "Min Score", 
-                        "max_score": "Max Score"
+                        "max_score": "Max Score",
+                        "Mastery": "Mastery Status"
                     }), 
                     use_container_width=True
                 )
@@ -737,7 +798,41 @@ if tab_control is not None:
                 st.dataframe(rows, use_container_width=True)
 
 # ────────────────────────────────────────────────────────────────────────────
-    # TAB 5 — LOGS
+# TAB — HALL OF FAME / LEADERBOARD
+# ────────────────────────────────────────────────────────────────────────────
+if tab_leaderboard is not None:
+    with tab_leaderboard:
+        st.subheader("🏆 Hall of Fame")
+        st.markdown("Celebrate the top performers of the week! Rankings are based on consistency (streaks) and technical accuracy.")
+        
+        leaderboard_data = PerformanceTracker.get_leaderboard(limit=10)
+        
+        if not leaderboard_data:
+            st.info("The arena is empty this week! Start answering questions to climb the ranks. 🚀")
+        else:
+            # Format data for display
+            display_rows = []
+            for i, entry in enumerate(leaderboard_data):
+                phone = entry["phone_number"]
+                # Mask phone for privacy: +9198*****123
+                masked = f"+{phone[:4]}*****{phone[-3:]}"
+                
+                streak = entry["current_streak"] or 0
+                streak_str = f"🔥 {streak}" if streak > 0 else "—"
+                
+                display_rows.append({
+                    "Rank": i + 1,
+                    "Learner": masked,
+                    "Streak": streak_str,
+                    "Avg Score": entry["avg_score"],
+                    "Attempts": entry["weekly_attempts"]
+                })
+            
+            st.table(display_rows)
+            st.balloons() if leaderboard_data and leaderboard_data[0]["phone_number"] == st.session_state.auth_user else None
+
+# ────────────────────────────────────────────────────────────────────────────
+# TAB 5 — LOGS
 # ────────────────────────────────────────────────────────────────────────────
 if tab_logs is not None:
     with tab_logs:

@@ -1,5 +1,6 @@
 import os
 import asyncio
+import datetime
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from src.content.agent import InterviewAgent
 from src.bot.client import WhatsAppClient
@@ -22,10 +23,55 @@ class InterviewScheduler:
         self.scheduler = AsyncIOScheduler()
         self.config = ConfigManager.load_config(phone_number)
         self.schedule_time = self.config.schedule_time
+        self.level = self.config.level
+        self.skill_profile = self.config.skill_profile
+        self.created_at = self.config.created_at
 
     # ------------------------------------------------------------------
     # Phase 5 — Weakness-Aware Daily Task
     # ------------------------------------------------------------------
+
+    def _get_progression_context(self):
+        """Calculate week number based on created_at date."""
+        now = datetime.datetime.now(datetime.timezone.utc)
+        start_date = self.created_at
+        
+        # Ensure start_date is timezone-aware
+        if start_date.tzinfo is None:
+            start_date = start_date.replace(tzinfo=datetime.timezone.utc)
+            
+        delta = now - start_date
+        week_num = (delta.days // 7) + 1
+        
+        # ── Auto-Progression Logic ─────────────────────────────────────
+        # Week 1-2: Beginner, Week 3-4: Intermediate, Week 5+: Advanced
+        order = ["Beginner", "Intermediate", "Advanced"]
+        target_level_idx = 0
+        if week_num >= 5:
+            target_level_idx = 2
+        elif week_num >= 3:
+            target_level_idx = 1
+            
+        current_level_idx = order.index(self.level) if self.level in order else 0
+        
+        if target_level_idx > current_level_idx:
+            new_level = order[target_level_idx]
+            logger.info(f"🚀 [{self.phone_number}] Auto-promoting from {self.level} to {new_level} (Week {week_num})")
+            
+            # Update DB
+            self.config.level = new_level
+            ConfigManager.save_config(self.phone_number, self.config)
+            self.level = new_level
+            
+            # Notify user via WhatsApp (async)
+            promo_msg = (
+                f"🎊 *Congratulations!* 🎊\n\n"
+                f"You've been automatically promoted to the *{new_level}* level based on your {week_num} weeks of consistent practice! 🚀\n\n"
+                f"Your daily challenges and deep-dives will now feature increased complexity. Keep pushing! 💪"
+            )
+            asyncio.create_task(self.whatsapp.send_message(promo_msg))
+            
+        return self.level, week_num
 
     async def daily_task(self):
         logger.info(f"🚀 [{self.phone_number}] Starting content delivery cycle")
@@ -39,8 +85,13 @@ class InterviewScheduler:
         topics = config.topics
 
         # 1. Architecture Challenge
+        level, week = self._get_progression_context()
+        logger.info(f"[{self.phone_number}] Progression: level={level}, week={week}")
+
         if topics.topic_1:
-            detailed_text, image_prompt = await self.agent.get_daily_challenge()
+            detailed_text, image_prompt = await self.agent.get_daily_challenge(
+                level=level, week=week, skill_profile=self.skill_profile
+            )
             image_path = await self.agent.llm.generate_image(image_prompt)
             await self.sender.send_to_all(
                 detailed_text, image_path,
@@ -73,7 +124,9 @@ class InterviewScheduler:
         for topic in selected_topics:
             # get_deep_dive_with_question returns (question_text, full_message)
             # We store the question in SessionManager for later scoring.
-            question, full_content = await self.agent.get_deep_dive_with_question(topic)
+            question, full_content = await self.agent.get_deep_dive_with_question(
+                topic, level=level, week=week, skill_profile=self.skill_profile
+            )
             SessionManager.set_active_question(self.phone_number, question, topic)
 
             await self.sender.send_to_all(full_content, title=f"Deep Dive: {topic}")
@@ -180,15 +233,34 @@ class InterviewScheduler:
                 await self.whatsapp.send_message(fallback_msg)
                 return
 
-            # ── Score with LLM ─────────────────────────────────────────
-            logger.info(f"[{phone}] Scoring answer for topic='{session['topic']}'...")
+            # ── Evaluate with LLM ──────────────────────────────────────
+            logger.info(f"[{phone}] Evaluating answer for topic='{session['topic']}'...")
+            level, week = self._get_progression_context()
+            
+            # Allow follow-up if we haven't done one yet for this session
+            allow_follow_up = session.get("follow_up_count", 0) < 1
+            
             result = await self.agent.evaluate_answer(
                 question=session["question"],
                 user_answer=text,
                 topic=session["topic"],
+                level=level,
+                allow_follow_up=allow_follow_up
             )
 
-            # ── Persist to DB ──────────────────────────────────────────
+            # ── Check for Follow-Up Question ───────────────────────────
+            follow_up = result.get("follow_up_question")
+            if allow_follow_up and follow_up and follow_up.strip().lower() != "null":
+                logger.info(f"[{phone}] Sending follow-up for topic='{session['topic']}'")
+                
+                # Update session instead of clearing it
+                SessionManager.update_session_with_follow_up(session["id"], follow_up.strip())
+                
+                # Send follow-up to user
+                await self.whatsapp.send_message(f"🤔 *Follow-up Question:*\n\n{follow_up.strip()}")
+                return
+
+            # ── If no follow-up, proceed to final scoring ──────────────
             PerformanceTracker.record_score(
                 phone=phone,
                 topic=session["topic"],
@@ -196,6 +268,9 @@ class InterviewScheduler:
                 weak_aspects=result["weak_aspects"],
                 feedback=result["feedback"],
             )
+
+            # ── Update Streak ─────────────────────────────────────────
+            new_streak = PerformanceTracker.update_streak(phone)
             SessionManager.clear_session(session["id"])
 
             # ── Send feedback back to user ─────────────────────────────
@@ -213,16 +288,19 @@ class InterviewScheduler:
                 emoji = "❌"
                 verdict = "Keep practising!"
 
+            streak_line = f"\n\n🔥 *{new_streak} Day Streak!* Keep it up." if new_streak > 1 else ""
+
             feedback_msg = (
                 f"{emoji} *Score: {score}/10 — {verdict}*\n\n"
                 f"{result['feedback']}"
+                f"{streak_line}"
             )
             if result["weak_aspects"]:
                 aspects = ", ".join(result["weak_aspects"])
                 feedback_msg += f"\n\n📌 *Review these concepts:* {aspects}"
 
             await self.whatsapp.send_message(feedback_msg)
-            logger.info(f"✅ [{phone}] Feedback sent — score {score}/10")
+            logger.info(f"✅ [{phone}] Feedback sent — score {score}/10, streak {new_streak}")
 
         except Exception as exc:
             logger.error(f"handle_incoming error: {exc}", exc_info=True)
@@ -232,9 +310,11 @@ class InterviewScheduler:
     # ------------------------------------------------------------------
 
     async def weekly_report_task(self):
-        """Send a weekly performance summary every Sunday morning."""
-        logger.info(f"📊 [{self.phone_number}] Generating weekly report...")
-
+        """
+        Calculates and sends a comprehensive weekly performance summary.
+        Includes Score (0-100), Strengths, and Weaknesses.
+        """
+        logger.info(f"📊 [{self.phone_number}] Generating enhanced weekly report...")
         summary = PerformanceTracker.get_weekly_summary(self.phone_number)
 
         if not summary:
@@ -246,35 +326,43 @@ class InterviewScheduler:
             await self.whatsapp.send_message(msg)
             return
 
-        lines = ["📊 *Weekly Performance Report*", "─────────────────────────"]
+        # Calculate Overall Learning Score
+        avg_scores = [float(s["avg_score"]) for s in summary]
+        weekly_score = int((sum(avg_scores) / len(avg_scores)) * 10) if avg_scores else 0
+        
+        strengths = [s["topic"] for s in summary if float(s["avg_score"]) >= 8.0]
+        weaknesses = [s["topic"] for s in summary if float(s["avg_score"]) < 6.0]
+
+        lines = [
+            "📊 *Weekly Performance Report*",
+            f"Overall Learning Score: *{weekly_score}/100*",
+            "─────────────────────────"
+        ]
+
+        if strengths:
+            lines.append(f"✅ *Strengths:* {', '.join(strengths)}")
+        
+        if weaknesses:
+            lines.append(f"⚠️ *Focus Areas:* {', '.join(weaknesses)}")
+            
+        lines.append("\n*Detailed Breakdown:*")
 
         for row in summary:
-            avg = row["avg_score"]
-            if avg >= 8:
-                icon = "🏆"
-            elif avg >= 6:
-                icon = "✅"
-            else:
-                icon = "⚠️"
+            mastery = ""
+            if self.level == "Advanced" and row["avg_score"] >= 9.0:
+                 mastery = " 💎 *Advanced Mastery*"
+                 
             lines.append(
-                f"{icon} *{row['topic']}*\n"
-                f"   Avg: {avg}/10  |  Attempts: {row['attempts']}  "
-                f"|  Best: {row['max_score']}  |  Worst: {row['min_score']}"
+                f"🔹 *{row['topic']}*{mastery}\n"
+                f"   Avg: {row['avg_score']}/10  |  Best: {row['max_score']}"
             )
 
-        weak = [r["topic"] for r in summary if r["avg_score"] < 6]
         total_attempts = sum(r["attempts"] for r in summary)
-
         lines.append("─────────────────────────")
         lines.append(f"📝 *Total answered this week:* {total_attempts} questions")
 
-        if weak:
-            lines.append(f"🔥 *Drill more this week:* {', '.join(weak)}")
-        else:
-            lines.append("🎯 All topics above threshold — keep it up!")
-
         await self.whatsapp.send_message("\n".join(lines))
-        logger.info(f"✅ [{self.phone_number}] Weekly report sent.")
+        logger.info(f"✅ [{self.phone_number}] Enhanced weekly report sent.")
 
     # ------------------------------------------------------------------
     # Per-Topic Delivery Tasks
@@ -292,9 +380,12 @@ class InterviewScheduler:
 
             logger.info(f"[{self.phone_number}] Delivering topic {slot}: {topic_name}")
             SessionManager.clear_all_stale(self.phone_number)
+            level, week = self._get_progression_context()
 
             if slot == 1:
-                detailed_text, image_prompt = await self.agent.get_daily_challenge()
+                detailed_text, image_prompt = await self.agent.get_daily_challenge(
+                    level=level, week=week, skill_profile=self.skill_profile
+                )
                 image_path = await self.agent.llm.generate_image(image_prompt)
                 await self.sender.send_to_all(
                     detailed_text, image_path,
@@ -304,7 +395,9 @@ class InterviewScheduler:
             elif slot in (2, 3):
                 weak_topics = PerformanceTracker.get_weak_topics(self.phone_number)
                 topic = weak_topics[0] if weak_topics else topic_name
-                question, full_content = await self.agent.get_deep_dive_with_question(topic)
+                question, full_content = await self.agent.get_deep_dive_with_question(
+                    topic, level=level, week=week, skill_profile=self.skill_profile
+                )
                 SessionManager.set_active_question(self.phone_number, question, topic)
                 await self.sender.send_to_all(full_content, title=f"Deep Dive: {topic}")
             elif slot == 4:
@@ -433,6 +526,9 @@ class InterviewScheduler:
                     logger.info(f"🔄 [{self.phone_number}] Config change detected — hot-reloading per-topic jobs...")
                     new_tz = getattr(new_cfg, "timezone", "UTC")
                     self.config = new_cfg
+                    self.level = new_cfg.level
+                    self.skill_profile = new_cfg.skill_profile
+                    self.created_at = new_cfg.created_at
                     last_snapshot = new_snapshot
 
                     # Remove old topic jobs and re-register

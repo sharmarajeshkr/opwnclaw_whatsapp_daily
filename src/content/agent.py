@@ -13,13 +13,20 @@ class InterviewAgent:
         self.history_manager = UserHistoryManager(phone_number)
         self.topic = topic
 
-    async def get_daily_challenge(self) -> tuple[str, str]:
-        """Returns (detailed_text, image_prompt) for the daily challenge, avoiding history."""
+    async def get_daily_challenge(self, level: str = "Beginner", week: int = 1, skill_profile: dict = None) -> tuple[str, str]:
+        """Returns (detailed_text, image_prompt) for the daily challenge, tailored by level and week."""
+        if skill_profile is None:
+            skill_profile = {"backend": 5, "system_design": 5, "ai": 5}
+        logger.info(f"Generating daily challenge for level='{level}', week={week}, skills={skill_profile}")
         history = self.history_manager.get_history("challenges")
         history_str = "\n".join([f"- {h}" for h in history])
         
         prompt = f"""
-        Generate a high-quality HLD/LLD Architecture Challenge and a DEEP-DIVE Solution for a Senior Architect role.
+        Generate a high-quality HLD/LLD Architecture Challenge and a DEEP-DIVE Solution.
+        
+        LEVEL: {level}
+        WEEK OF CURRICULUM: {week}
+        SKILL PROFILE: {skill_profile}
         
         Topics: Kafka, Spring Boot, microservices, Distributed Tracing, Circuit Breaker, API Gateway, caching, DB scaling, Python, ML, Agentic AI.
         
@@ -35,6 +42,10 @@ class InterviewAgent:
         4. *Reliability* - Retry + DLQ, Circuit Breakers, idempotency keys, fallout management.
         5. *Observability* - Distributed tracing (OpenTelemetry), key metrics, SLOs.
         
+        If LEVEL is 'Beginner', focus on fundamental concepts and simple patterns.
+        If LEVEL is 'Intermediate', focus on scale and common distributed trade-offs.
+        If LEVEL is 'Advanced', focus on niche edge cases, complex failure modes, and high-performance tuning.
+        
         Provide:
         - *Architectural Challenge* (The Problem).
         - *Proposed Solution* (Deep-dive sections 1-5).        
@@ -49,19 +60,30 @@ class InterviewAgent:
 
         return response.strip(), "A professional technical architecture diagram of a high-scale distributed system."
 
-    async def get_deep_dive_with_question(self, subject: str) -> tuple[str, str]:
+    async def get_deep_dive_with_question(self, subject: str, level: str = "Beginner", week: int = 1, skill_profile: dict = None) -> tuple[str, str]:
         """
         Returns (scoreable_question, full_WhatsApp_message).
-
+        Tailored by level, week, and skill profile.
+        
         The question is stored in SessionManager so the user's reply can be
         scored later. The full message (question + detailed answer) is what
         gets sent to WhatsApp.
         """
+        logger.info(f"Generating deep dive for subject='{subject}', level='{level}', week={week}")
         history = self.history_manager.get_history(subject)
         history_str = "\n".join([f"- {h}" for h in history])
 
         prompt = f"""
-        Generate a senior-level technical deep-dive focused entirely on '{subject}'.
+        Generate a technical deep-dive focused entirely on '{subject}'.
+        
+        LEVEL: {level}
+        WEEK OF CURRICULUM: {week}
+        SKILL PROFILE: {skill_profile}
+        
+        Difficulty Scaling:
+        - Week 1: Fundamental basics, terminology, and core usage.
+        - Week 2-3: Intermediate mechanics, implementation details.
+        - Week 4+: Advanced internals, distributed challenges, and optimization.
 
         PREVIOUS TOPICS COVERED (DO NOT REPEAT):
         {history_str}
@@ -108,24 +130,17 @@ class InterviewAgent:
     # ------------------------------------------------------------------
 
     async def evaluate_answer(
-        self, question: str, user_answer: str, topic: str
+        self, question: str, user_answer: str, topic: str, level: str = "Beginner", allow_follow_up: bool = True
     ) -> dict:
         """
         Score a user's WhatsApp reply against the original question.
-
-        Returns:
-            {
-              "score":        int (0–10),
-              "feedback":     str (2–3 line WhatsApp-ready message),
-              "weak_aspects": list[str]  (concepts the user missed)
-            }
-        If the LLM returns malformed JSON the method returns a safe fallback
-        so the calling code never crashes.
+        Returns score, feedback, and an optional follow_up_question.
         """
         prompt = f"""
         You are an expert senior engineering interviewer assessing a candidate's answer.
 
         TOPIC: {topic}
+        TARGET LEVEL: {level}
 
         QUESTION ASKED:
         {question}
@@ -133,8 +148,21 @@ class InterviewAgent:
         CANDIDATE'S ANSWER:
         {user_answer}
 
-        Evaluate the answer and return ONLY valid JSON — no extra text, no markdown fences:
-        {{"score": <integer 0-10>, "feedback": "<2-3 sentence WhatsApp-ready feedback>", "weak_aspects": ["<concept missed>", ...]}}
+        1. Evaluate the answer.
+        2. If allow_follow_up is TRUE and the answer is good but lacks depth in a specific area, 
+           propose a single, sharp follow-up question to probe deeper.
+        
+        Return ONLY valid JSON:
+        {{
+            "score": <0-10>, 
+            "feedback": "<2-3 sentence feedback>", 
+            "weak_aspects": ["<concepts>"],
+            "follow_up_question": "<optional question or null>"
+        }}
+
+        Evaluation criteria should respect the target LEVEL ({level}). 
+        For a Beginner, be encouraging and focus on core clarity. 
+        For Advanced, be more critical about depth and edge-case awareness.
 
         Scoring guide:
         - 9-10: Exceptional — covers all key aspects with depth
@@ -171,6 +199,7 @@ class InterviewAgent:
                     "score":        max(0, min(10, int(data.get("score", 5)))),
                     "feedback":     str(data.get("feedback", "Answer received!")),
                     "weak_aspects": list(data.get("weak_aspects", [])),
+                    "follow_up_question": data.get("follow_up_question"),
                 }
         except Exception as exc:
             logger.warning(f"Could not parse eval JSON for topic '{topic}': {exc}")

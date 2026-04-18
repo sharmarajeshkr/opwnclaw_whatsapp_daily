@@ -139,3 +139,78 @@ class PerformanceTracker:
                 (phone,),
             ).fetchall()
         return [dict(row) for row in rows]
+
+    @staticmethod
+    def update_streak(phone: str) -> int:
+        """
+        Increment or reset the daily streak based on the last reply time.
+        Returns the new streak count.
+        """
+        now = datetime.now(timezone.utc)
+        with get_conn() as conn:
+            # 1. Fetch current status
+            status = conn.execute(
+                "SELECT current_streak, last_reply_at FROM user_status WHERE phone_number = %s",
+                (phone,)
+            ).fetchone()
+            
+            if not status:
+                # Initialize if not exists
+                conn.execute(
+                    "INSERT INTO user_status (phone_number, current_streak, last_reply_at, is_paired) VALUES (%s, 1, %s, TRUE)",
+                    (phone, now)
+                )
+                return 1
+            
+            last_reply = status["last_reply_at"]
+            curr_streak = status["current_streak"] or 0
+            
+            if last_reply:
+                # Ensure we compare in UTC
+                if last_reply.tzinfo is not None:
+                    last_reply = last_reply.astimezone(timezone.utc)
+                else:
+                    last_reply = last_reply.replace(tzinfo=timezone.utc)
+                
+                delta = now.date() - last_reply.date()
+                if delta.days == 0:
+                    # Already replied today
+                    return curr_streak
+                elif delta.days == 1:
+                    # Consecutive day
+                    new_streak = curr_streak + 1
+                else:
+                    # Missed a day
+                    new_streak = 1
+            else:
+                new_streak = 1
+                
+            conn.execute(
+                "UPDATE user_status SET current_streak = %s, last_reply_at = %s WHERE phone_number = %s",
+                (new_streak, now, phone)
+            )
+            return new_streak
+
+    @staticmethod
+    def get_leaderboard(limit: int = 5) -> list[dict]:
+        """
+        Aggregate all users and rank them by weighted weekly score.
+        """
+        with get_conn() as conn:
+            rows = conn.execute(
+                """
+                SELECT 
+                    p.phone_number,
+                    s.current_streak,
+                    ROUND(AVG(p.score)::numeric, 1) as avg_score,
+                    COUNT(*) as weekly_attempts
+                FROM performance_scores p
+                LEFT JOIN user_status s ON p.phone_number = s.phone_number
+                WHERE p.answered_at::timestamptz >= NOW() - INTERVAL '7 days'
+                GROUP BY p.phone_number, s.current_streak
+                ORDER BY avg_score DESC, weekly_attempts DESC
+                LIMIT %s
+                """,
+                (limit,)
+            ).fetchall()
+        return [dict(row) for row in rows]

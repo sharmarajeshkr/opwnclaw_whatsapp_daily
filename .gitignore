@@ -8,7 +8,9 @@ venv/
 # Databases and sessions
 *.sqlite3*
 data/users/*.sqlite3
+data/users/*.json
 data/history/
+data/coach.db
 
 # WhatsApp QR codes
 data/qr_*.png

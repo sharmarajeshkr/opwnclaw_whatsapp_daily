@@ -1,4 +1,5 @@
 import json
+import datetime
 from typing import Dict, Any, List
 from pydantic import BaseModel, Field
 from cryptography.fernet import Fernet
@@ -28,6 +29,9 @@ class UserConfig(BaseModel):
     pin_code: str = "0000"
     topics: TopicsConfig = Field(default_factory=TopicsConfig)
     channels: ChannelsConfig = Field(default_factory=ChannelsConfig)
+    level: str = "Beginner"
+    created_at: datetime.datetime = Field(default_factory=datetime.datetime.now)
+    skill_profile: Dict[str, int] = Field(default_factory=lambda: {"backend": 5, "system_design": 5, "ai": 5})
 
 
 class ConfigManager:
@@ -90,6 +94,9 @@ class ConfigManager:
                 "pin_code": row["pin_code"],
                 "topics": row["topics"],
                 "channels": row["channels"],
+                "level": row.get("level", "Beginner"),
+                "created_at": row.get("created_at", datetime.datetime.now()),
+                "skill_profile": row.get("skill_profile", {"backend": 5, "system_design": 5, "ai": 5}),
             }
             data = ConfigManager._decrypt_dict(data)
             return UserConfig.model_validate(data)
@@ -118,15 +125,17 @@ class ConfigManager:
         with get_conn() as conn:
             conn.execute(
                 """
-                INSERT INTO user_configs (phone_number, schedule_time, timezone, pin_code, topics, channels, updated_at)
-                VALUES (%s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP)
+                INSERT INTO user_configs (phone_number, schedule_time, timezone, pin_code, topics, channels, level, skill_profile, updated_at)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP)
                 ON CONFLICT (phone_number) DO UPDATE SET
                     schedule_time = EXCLUDED.schedule_time,
-                    timezone = EXCLUDED.timezone,
-                    pin_code = EXCLUDED.pin_code,
-                    topics = EXCLUDED.topics,
-                    channels = EXCLUDED.channels,
-                    updated_at = CURRENT_TIMESTAMP
+                    timezone      = EXCLUDED.timezone,
+                    pin_code      = EXCLUDED.pin_code,
+                    topics        = EXCLUDED.topics,
+                    channels      = EXCLUDED.channels,
+                    level         = EXCLUDED.level,
+                    skill_profile = EXCLUDED.skill_profile,
+                    updated_at    = CURRENT_TIMESTAMP
                 """,
                 (
                     phone_number,
@@ -134,7 +143,9 @@ class ConfigManager:
                     data.get("timezone"),
                     data.get("pin_code"),
                     json.dumps(data.get("topics", {})),
-                    json.dumps(data.get("channels", {}))
+                    json.dumps(data.get("channels", {})),
+                    data.get("level", "Beginner"),
+                    json.dumps(data.get("skill_profile", {})),
                 )
             )
 

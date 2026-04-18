@@ -48,8 +48,8 @@ class SessionManager:
             conn.execute(
                 """
                 INSERT INTO sessions
-                    (phone_number, question, topic, sent_at, awaiting_reply)
-                VALUES (%s, %s, %s, %s, 1)
+                    (phone_number, question, topic, sent_at, awaiting_reply, follow_up_count)
+                VALUES (%s, %s, %s, %s, 1, 0)
                 """,
                 (phone, question, topic, now),
             )
@@ -67,7 +67,7 @@ class SessionManager:
         with get_conn() as conn:
             row = conn.execute(
                 """
-                SELECT id, question, topic, sent_at
+                SELECT id, question, topic, sent_at, follow_up_count
                 FROM sessions
                 WHERE phone_number = %s AND awaiting_reply = 1
                 ORDER BY sent_at ASC
@@ -100,6 +100,22 @@ class SessionManager:
                 (session_id,),
             )
         logger.debug(f"Session id={session_id} cleared.")
+
+    @staticmethod
+    def update_session_with_follow_up(session_id: int, follow_up_question: str) -> None:
+        """
+        Replace the current question with a follow-up and increment the count.
+        """
+        with get_conn() as conn:
+            conn.execute(
+                """
+                UPDATE sessions 
+                SET question = %s, follow_up_count = follow_up_count + 1 
+                WHERE id = %s
+                """,
+                (follow_up_question, session_id),
+            )
+        logger.info(f"Session id={session_id} updated with follow-up question.")
 
     @staticmethod
     def clear_all_stale(phone: str) -> None:
