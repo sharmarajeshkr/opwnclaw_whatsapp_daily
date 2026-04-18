@@ -2,13 +2,11 @@ import os
 import asyncio
 from neonize.aioze.client import NewAClient
 from neonize.utils.jid import build_jid
-from dotenv import load_dotenv
-
-load_dotenv()
+from src.core.sys_config import settings
 
 async def main():
-    session = os.getenv("WHATSAPP_SESSION_NAME", "interview_bot_v5")
-    phone = os.getenv("WHATSAPP_TARGET_NUMBER").strip('+')
+    session = settings.WHATSAPP_SESSION_NAME
+    phone = settings.WHATSAPP_TARGET_NUMBER.strip('+') if settings.WHATSAPP_TARGET_NUMBER else ""
     
     print(f"Testing delivery to {phone} using session {session}...")
     client = NewAClient(f"{session}.sqlite3")

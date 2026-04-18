@@ -9,7 +9,7 @@ def modify_app_py():
     
     auth_logic = """
 # ── Authentication Gate ──────────────────────────────────────────────────────
-from src.core.env import get_admin_password
+from src.core.sys_config import settings
 
 if "authenticated" not in st.session_state:
     st.session_state.authenticated = False
@@ -25,7 +25,7 @@ if not st.session_state.authenticated:
     login_pass = st.text_input("Password / PIN", type="password")
     
     if st.button("Login", type="primary"):
-        admin_pass = get_admin_password()
+        admin_pass = settings.ADMIN_PASSWORD
         
         if not login_phone.strip():
             if admin_pass and login_pass == admin_pass:

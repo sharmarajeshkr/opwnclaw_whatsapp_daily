@@ -1,39 +1,45 @@
-import json
-import os
-
-HISTORY_DIR = os.path.join("data", "history")
+from src.core.db import get_conn
 
 class UserHistoryManager:
     def __init__(self, phone_number: str):
         self.phone_number = phone_number
-        self.history_file = os.path.join(HISTORY_DIR, f"{phone_number}.json")
-        self._ensure_history_dir()
 
-    def _ensure_history_dir(self):
-        if not os.path.exists(HISTORY_DIR):
-            os.makedirs(HISTORY_DIR, exist_ok=True)
+    def add_to_history(self, category: str, item: str):
+        """Adds an item to the user's history in PostgreSQL to avoid repetition."""
+        with get_conn() as conn:
+            conn.execute(
+                """
+                INSERT INTO user_history (phone_number, category, item)
+                VALUES (%s, %s, %s)
+                ON CONFLICT (phone_number, category, item) DO NOTHING
+                """,
+                (self.phone_number, category, item)
+            )
+            
+            # Pruning strategy: keep only last 50 entries per category per user
+            # This is slightly more complex in SQL but manageable
+            conn.execute(
+                """
+                DELETE FROM user_history 
+                WHERE (phone_number, category, item) IN (
+                    SELECT phone_number, category, item 
+                    FROM (
+                        SELECT phone_number, category, item, 
+                               ROW_NUMBER() OVER (PARTITION BY phone_number, category ORDER BY created_at DESC) as rn
+                        FROM user_history
+                        WHERE phone_number = %s AND category = %s
+                    ) tmp 
+                    WHERE rn > 50
+                )
+                """,
+                (self.phone_number, category)
+            )
 
-    def _load_history(self):
-        if not os.path.exists(self.history_file):
-            return {"challenges": [], "medium_posts": [], "news": []}
-        try:
-            with open(self.history_file, "r") as f:
-                return json.load(f)
-        except Exception:
-            return {"challenges": [], "medium_posts": [], "news": []}
-
-    def _save_history(self, history):
-        with open(self.history_file, "w") as f:
-            json.dump(history, f, indent=4)
-
-    def add_to_history(self, category, item):
-        history = self._load_history()
-        if item not in history.get(category, []):
-            history.setdefault(category, []).append(item)
-            # Keep only last 50 entries
-            if len(history[category]) > 50:
-                history[category].pop(0)
-            self._save_history(history)
-
-    def get_history(self, category):
-        return self._load_history().get(category, [])
+    def get_history(self, category: str):
+        """Returns the list of historical items for a specific category from PostgreSQL."""
+        with get_conn() as conn:
+            rows = conn.execute(
+                "SELECT item FROM user_history WHERE phone_number = %s AND category = %s ORDER BY created_at DESC",
+                (self.phone_number, category)
+            ).fetchall()
+        return [row["item"] for row in rows]

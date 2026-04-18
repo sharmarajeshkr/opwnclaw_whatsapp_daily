@@ -17,8 +17,12 @@ from src.core.utils import (
     is_user_paired,
     trigger_qr_script,
 )
+from src.core.db import init_db
 
 logger = get_logger("StreamlitApp")
+
+# Initialize database schema
+init_db()
 
 # ── Helpers imported from src.core.utils ─────────────────────────────────────
 # is_bot_running, start_bot, stop_bot, delete_user_data,
@@ -40,10 +44,16 @@ st.markdown("""
 
 html, body, [class*="st-"] { font-family: 'Inter', sans-serif; }
 
-/* Hide the broken sidebar collapse/expand button */
+/* Hide the sidebar collapse/expand arrow button and any orphan icon text */
+[data-testid="collapsedControl"],
+[data-testid="stSidebarCollapsedControl"],
 button[data-testid="collapsedControl"],
 section[data-testid="stSidebarCollapsedControl"] {
     display: none !important;
+    visibility: hidden !important;
+    width: 0 !important;
+    height: 0 !important;
+    overflow: hidden !important;
 }
 
 /* Dark glassmorphism cards */
@@ -119,12 +129,40 @@ section[data-testid="stSidebarCollapsedControl"] {
 </style>
 """, unsafe_allow_html=True)
 
+# ── Hide sidebar collapse arrow (JS targets the Streamlit host frame) ─────────
+import streamlit.components.v1 as _components
+_components.html("""
+<script>
+(function hideSidebarArrow() {
+    function remove() {
+        var selectors = [
+            '[data-testid="collapsedControl"]',
+            '[data-testid="stSidebarCollapsedControl"]'
+        ];
+        selectors.forEach(function(sel) {
+            var els = window.parent.document.querySelectorAll(sel);
+            els.forEach(function(el) {
+                el.style.display = 'none';
+                el.style.visibility = 'hidden';
+                el.style.width = '0';
+                el.style.overflow = 'hidden';
+            });
+        });
+    }
+    // Run immediately and again after Streamlit re-renders
+    remove();
+    setTimeout(remove, 500);
+    setTimeout(remove, 1500);
+})();
+</script>
+""", height=0)
+
 # ── Header ───────────────────────────────────────────────────────────────────
-st.markdown('<p class="hero-title">🦀 OpenClaw — Multi-User Bot Dashboard</p>', unsafe_allow_html=True)
+st.markdown('<p class="hero-title">🦀 Innterview Bot Dashboard</p>', unsafe_allow_html=True)
 st.markdown('<p class="hero-sub">Manage WhatsApp delivery profiles and schedules for each user.</p>', unsafe_allow_html=True)
 
 # ── Authentication Gate ──────────────────────────────────────────────────────
-from src.core.env import get_admin_password
+from src.core.sys_config import settings
 
 if "authenticated" not in st.session_state:
     st.session_state.authenticated = False
@@ -143,7 +181,7 @@ if not st.session_state.authenticated:
         login_pass = st.text_input("Password / PIN", type="password")
         
         if st.button("Login", type="primary", use_container_width=True):
-            admin_pass = get_admin_password()
+            admin_pass = settings.ADMIN_PASSWORD
             
             if not login_phone.strip():
                 if admin_pass and login_pass == admin_pass:
@@ -281,10 +319,10 @@ if tab_profiles is not None:
 
             # ── Table Rows ──
             for phone in users:
-                cfg = ConfigManager.load_config(phone)
-                qr_path = os.path.join("data", f"qr_{phone}.png")
-                paired = not os.path.exists(qr_path)
+                # Use DB-driven status
+                paired = is_user_paired(phone)
                 running = is_bot_running(phone)
+                cfg = ConfigManager.load_config(phone)
             
                 sched = cfg.schedule_time if cfg.schedule_time else "—"
                 active_topics = [v for k, v in cfg.topics.model_dump().items() if v]
@@ -335,12 +373,19 @@ if tab_profiles is not None:
 
         st.subheader("➕ Register New User")
         with st.form("new_user_form", clear_on_submit=True):
-            col_ph, col_btn = st.columns([3, 1])
+            col_ph, col_pin, col_btn = st.columns([3, 1, 1])
             with col_ph:
                 new_phone = st.text_input(
                     "Mobile Number (with country code)",
                     placeholder="+919876543210",
                     label_visibility="collapsed",
+                )
+            with col_pin:
+                new_pin = st.text_input(
+                    "PIN",
+                    placeholder="PIN (4 digits)",
+                    label_visibility="collapsed",
+                    max_chars=4,
                 )
             with col_btn:
                 st.markdown("<br>", unsafe_allow_html=True)
@@ -353,8 +398,13 @@ if tab_profiles is not None:
                 elif raw in users and is_user_paired(raw):
                     st.warning(f"+{raw} is already registered and paired.")
                 else:
+                    from src.core.config import UserConfig, ChannelsConfig
+                    default_channels = ChannelsConfig(whatsapp_target=raw)
+                    pin_value = new_pin.strip() if new_pin.strip() else "0000"
+                    new_cfg = UserConfig(channels=default_channels, pin_code=pin_value)
+                    ConfigManager.save_config(raw, new_cfg)
                     trigger_qr_script(raw)
-                    st.success(f"✅ Initializing registration for +{raw}. QR will appear shortly.")
+                    st.success(f"✅ User +{raw} registered (PIN: {pin_value}). QR will appear shortly.")
                     time.sleep(3)
                     st.rerun()
 
@@ -444,8 +494,12 @@ if tab_config is not None:
             with st.form("user_config_form"):
                 col_s1, col_s1a, col_s2, col_s3 = st.columns([1, 1, 1, 1])
                 with col_s1:
-                    t_hour, t_min = map(int, config.schedule_time.split(":"))
-                    schedule = st.time_input("Daily Delivery Time", value=datetime.time(t_hour, t_min))
+                    schedule = st.text_input(
+                        "Default Delivery Time (HH:MM)",
+                        value=config.schedule_time,
+                        placeholder="e.g. 20:00",
+                        help="Fallback time for any topic that has no individual time set."
+                    )
                 with col_s1a:
                     tz_idx = 0
                     common_tzs = pytz.common_timezones
@@ -470,37 +524,121 @@ if tab_config is not None:
                     pin = getattr(config, "pin_code", "0000")
 
                 st.markdown("---")
-                st.subheader("📚 Content Sequence Topics")
-                col_c1, col_c2 = st.columns(2)
-                
-                with col_c1:
-                    t1 = st.text_input("1. Architecture Challenge", value=config.topics.topic_1)
-                    t2 = st.text_input("2. Deep Dive Subject 1", value=config.topics.topic_2)
-                    t3 = st.text_input("3. Deep Dive Subject 2", value=config.topics.topic_3)
-                with col_c2:
-                    t4 = st.text_input("4. Fresh Updates 1", value=config.topics.topic_4)
-                    t5 = st.text_input("5. Details from Medium ", value=config.topics.topic_5)
-                    st.markdown("<br>", unsafe_allow_html=True)
-                    save_btn = st.form_submit_button("💾 Save Configuration", type="primary", use_container_width=True)
+                st.subheader("📚 Topic Schedule")
+
+                # Detect if any topic currently has an individual time set → default to Per-Topic
+                has_per_topic = any(
+                    getattr(config.topics, f"topic_{n}_time", "").strip()
+                    for n in range(1, 6)
+                )
+                schedule_mode = st.radio(
+                    "Schedule Mode",
+                    options=["🌐 Global — one time for all topics", "🕐 Per-Topic — different time per topic"],
+                    index=1 if has_per_topic else 0,
+                    horizontal=True,
+                    help="Global: all topics fire at the same time. Per-Topic: each topic has its own delivery time.",
+                )
+                is_per_topic = schedule_mode.startswith("🕐")
+
+                if is_per_topic:
+                    st.caption("Set a custom delivery time per topic. Leave blank to fall back to the Default Time above.")
+                else:
+                    st.caption(f"All topics will be delivered as one batch at the Default Delivery Time above.")
+
+                # Table header — hide time column in Global mode
+                if is_per_topic:
+                    th_topic, th_label, th_time = st.columns([2, 3, 1])
+                    th_topic.markdown("**Topic**")
+                    th_label.markdown("**Subject / Label**")
+                    th_time.markdown("**Time (HH:MM)**")
+                else:
+                    th_topic, th_label = st.columns([2, 3])
+                    th_topic.markdown("**Topic**")
+                    th_label.markdown("**Subject / Label**")
+
+                TOPIC_DEFS = [
+                    ("1", "🏗️ Architecture Challenge"),
+                    ("2", "🔬 Deep Dive 1"),
+                    ("3", "🔬 Deep Dive 2"),
+                    ("4", "📰 Fresh Updates"),
+                    ("5", "📖 Medium Articles"),
+                ]
+                topic_values = {}
+                for n, label in TOPIC_DEFS:
+                    if is_per_topic:
+                        c_topic, c_label, c_time = st.columns([2, 3, 1])
+                    else:
+                        c_topic, c_label = st.columns([2, 3])
+                    with c_topic:
+                        st.markdown(f"{label}")
+                    with c_label:
+                        topic_values[f"t{n}"] = st.text_input(
+                            f"topic_{n}_label",
+                            value=getattr(config.topics, f"topic_{n}"),
+                            label_visibility="collapsed",
+                            key=f"topic_{n}_label_{selected_user}"
+                        )
+                    if is_per_topic:
+                        with c_time:
+                            topic_values[f"t{n}_time"] = st.text_input(
+                                f"topic_{n}_time",
+                                value=getattr(config.topics, f"topic_{n}_time", ""),
+                                placeholder="HH:MM",
+                                label_visibility="collapsed",
+                                key=f"topic_{n}_time_{selected_user}",
+                                help=f"Leave blank to use Default Time ({config.schedule_time})"
+                            )
+                    else:
+                        # Global mode — clear all per-topic times on save
+                        topic_values[f"t{n}_time"] = ""
+
+                st.markdown("<br>", unsafe_allow_html=True)
+                save_btn = st.form_submit_button("💾 Save Configuration", type="primary", use_container_width=True)
 
                 if save_btn:
-                    new_cfg = UserConfig(
-                        schedule_time=schedule.strftime("%H:%M"),
-                        timezone=tz_selection,
-                        pin_code=pin,
-                        topics={
-                            "topic_1": t1, "topic_2": t2, "topic_3": t3,
-                            "topic_4": t4, "topic_5": t5,
-                        },
-                        channels={
-                            "whatsapp_target": selected_user,
-                            "telegram_bot_token": tg_token,
-                            "telegram_chat_id": tg_chat,
-                            "slack_webhook_url": sl_hook,
-                        }
-                    )
-                    ConfigManager.save_config(selected_user, new_cfg)
-                    st.success(f"✅ Saved for +{selected_user}! Setting changes apply immediately via hot-reload.")
+                    # Validate custom times
+                    time_error = False
+                    for n, _ in TOPIC_DEFS:
+                        t = topic_values[f"t{n}_time"].strip()
+                        if t:
+                            parts = t.split(":")
+                            valid = (
+                                len(parts) == 2
+                                and parts[0].isdigit() and parts[1].isdigit()
+                                and 0 <= int(parts[0]) <= 23
+                                and 0 <= int(parts[1]) <= 59
+                            )
+                            if not valid:
+                                st.error(f"Invalid time for topic {n}: '{t}'. Use HH:MM format (e.g. 08:30).")
+                                time_error = True
+                    # Validate global time
+                    global_t = schedule.strip()
+                    g_parts = global_t.split(":")
+                    if not (len(g_parts) == 2 and g_parts[0].isdigit() and g_parts[1].isdigit()):
+                        st.error("Default Delivery Time must be in HH:MM format.")
+                        time_error = True
+
+                    if not time_error:
+                        new_cfg = UserConfig(
+                            schedule_time=global_t,
+                            timezone=tz_selection,
+                            pin_code=pin,
+                            topics={
+                                "topic_1": topic_values["t1"], "topic_1_time": topic_values["t1_time"],
+                                "topic_2": topic_values["t2"], "topic_2_time": topic_values["t2_time"],
+                                "topic_3": topic_values["t3"], "topic_3_time": topic_values["t3_time"],
+                                "topic_4": topic_values["t4"], "topic_4_time": topic_values["t4_time"],
+                                "topic_5": topic_values["t5"], "topic_5_time": topic_values["t5_time"],
+                            },
+                            channels={
+                                "whatsapp_target": selected_user,
+                                "telegram_bot_token": tg_token,
+                                "telegram_chat_id": tg_chat,
+                                "slack_webhook_url": sl_hook,
+                            }
+                        )
+                        ConfigManager.save_config(selected_user, new_cfg)
+                        st.success(f"✅ Saved! Topic schedules apply within 60 seconds via hot-reload.")
 
 # ────────────────────────────────────────────────────────────────────────────
     # TAB 3 — PERFORMANCE DASHBOARD
@@ -594,7 +732,7 @@ if tab_control is not None:
                     rows.append({
                         "User": f"+{u}",
                         "Delivery Time": c.schedule_time,
-                        "Status": "Ready" if not os.path.exists(os.path.join("data", f"qr_{u}.png")) else "Awaiting Pair"
+                        "Status": "Ready" if is_user_paired(u) else "Awaiting Pair"
                     })
                 st.dataframe(rows, use_container_width=True)
 

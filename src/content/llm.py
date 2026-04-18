@@ -1,13 +1,13 @@
 import os
-from src.core.env import get_openai_key, get_gemini_key
+from src.core.sys_config import settings
 from src.core.logger import get_logger
 
 logger = get_logger("LLMProvider")
 
 class LLMProvider:
     def __init__(self):
-        self.openai_key = get_openai_key()
-        self.gemini_key = get_gemini_key()
+        self.openai_key = settings.OPENAI_API_KEY
+        self.gemini_key = settings.GEMINI_API_KEY
         
         if self.openai_key:
             from openai import OpenAI

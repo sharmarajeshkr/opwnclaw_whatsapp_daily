@@ -277,20 +277,113 @@ class InterviewScheduler:
         logger.info(f"✅ [{self.phone_number}] Weekly report sent.")
 
     # ------------------------------------------------------------------
+    # Per-Topic Delivery Tasks
+    # ------------------------------------------------------------------
+
+    def _make_topic_task(self, slot: int):
+        """Return an async function that delivers only the content for a given topic slot (1-5)."""
+        async def _task():
+            self.sender.refresh_config()
+            config = self.sender.config
+            topics = config.topics
+            topic_name = getattr(topics, f"topic_{slot}", "")
+            if not topic_name:
+                return
+
+            logger.info(f"[{self.phone_number}] Delivering topic {slot}: {topic_name}")
+            SessionManager.clear_all_stale(self.phone_number)
+
+            if slot == 1:
+                detailed_text, image_prompt = await self.agent.get_daily_challenge()
+                image_path = await self.agent.llm.generate_image(image_prompt)
+                await self.sender.send_to_all(
+                    detailed_text, image_path,
+                    "Visual Diagram for the Challenge",
+                    title=topic_name
+                )
+            elif slot in (2, 3):
+                weak_topics = PerformanceTracker.get_weak_topics(self.phone_number)
+                topic = weak_topics[0] if weak_topics else topic_name
+                question, full_content = await self.agent.get_deep_dive_with_question(topic)
+                SessionManager.set_active_question(self.phone_number, question, topic)
+                await self.sender.send_to_all(full_content, title=f"Deep Dive: {topic}")
+            elif slot == 4:
+                content = await self.agent.get_curated_content(
+                    "Tech_news", f"Top global news about {topic_name} for today."
+                )
+                await self.sender.send_to_all(content, title=f"Fresh Updates: {topic_name}")
+            elif slot == 5:
+                try:
+                    tag = topic_name.lower().replace(" ", "-")
+                    mcp_data = await run_medium_query(tag, is_user=False, limit=3)
+                    prompt = (
+                        f"I just pulled the live Medium.com RSS feed for '{topic_name}'. "
+                        f"Here is the raw data from my MCP tools:\n\n{mcp_data}\n\n"
+                        "Please rewrite this into a friendly, structured WhatsApp reading list. "
+                        "Include the exact links so the user can read them. Do not hallucinate any posts."
+                    )
+                    content = await self.agent.get_curated_content("Medium_updates", prompt)
+                    await self.sender.send_to_all(content, title=f"Latest from Medium: {topic_name}")
+                except Exception as e:
+                    logger.error(f"MCP Error for {topic_name}: {e}")
+                    content = await self.agent.get_curated_content(
+                        "Global_news", f"Top global news about {topic_name} for today."
+                    )
+                    await self.sender.send_to_all(content, title=f"Fresh Updates: {topic_name}")
+
+            logger.info(f"✅ [{self.phone_number}] Topic {slot} delivery done.")
+
+        _task.__name__ = f"topic_{slot}_task"
+        return _task
+
+    def _resolve_time(self, topic_time: str, global_time: str) -> tuple[int, int]:
+        """Return (hour, minute) from topic_time if valid, else fall back to global_time."""
+        raw = (topic_time or "").strip()
+        if raw and ":" in raw:
+            try:
+                h, m = map(int, raw.split(":"))
+                if 0 <= h <= 23 and 0 <= m <= 59:
+                    return h, m
+            except ValueError:
+                pass
+        h, m = map(int, global_time.split(":"))
+        return h, m
+
+    def _register_topic_jobs(self, config, timezone_str: str):
+        """Register one APScheduler cron job per topic, each at its own time."""
+        self._topic_jobs = []
+        for slot in range(1, 6):
+            topic_name = getattr(config.topics, f"topic_{slot}", "")
+            if not topic_name:
+                continue
+            topic_time = getattr(config.topics, f"topic_{slot}_time", "")
+            hour, minute = self._resolve_time(topic_time, config.schedule_time)
+            job = self.scheduler.add_job(
+                self._make_topic_task(slot),
+                trigger="cron",
+                hour=hour,
+                minute=minute,
+                timezone=timezone_str,
+                id=f"{self.phone_number}_topic_{slot}",
+                replace_existing=True,
+            )
+            self._topic_jobs.append(job)
+            logger.info(
+                f"[{self.phone_number}] Scheduled topic {slot} '{topic_name}' at {hour:02d}:{minute:02d} ({timezone_str})"
+            )
+
+    # ------------------------------------------------------------------
     # Startup
     # ------------------------------------------------------------------
 
     async def start(self):
         # Phase 4: Wire the incoming message handler BEFORE connecting
-        # We add a wrapper to log EVERY message event that neonize fires
         async def raw_message_logger(c, m):
             try:
                 sender_jid = getattr(m.Info.MessageSource, "Sender", None)
                 sender = getattr(sender_jid, "User", "Unknown") if sender_jid else "Unknown"
-                
                 chat_jid = getattr(m.Info.MessageSource, "Chat", None)
                 chat = getattr(chat_jid, "User", "Unknown") if chat_jid else "Unknown"
-                
                 is_from_me = getattr(m.Info.MessageSource, "IsFromMe", False)
                 text = (getattr(m.Message, "conversation", "") or getattr(getattr(m.Message, "extendedTextMessage", None), "text", "") or "")
                 logger.info(f"RAW MESSAGE EVENT: chat={chat}, sender={sender}, is_from_me={is_from_me}, text='{text[:30]}'")
@@ -306,21 +399,12 @@ class InterviewScheduler:
         await self.whatsapp.connect()
 
         self.config = ConfigManager.load_config(self.phone_number)
-        self.schedule_time = self.config.schedule_time
-        hour, minute = map(int, self.schedule_time.split(":"))
         timezone_str = getattr(self.config, "timezone", "UTC")
 
-        # Daily content delivery
-        self.daily_job = self.scheduler.add_job(
-            self.daily_task,
-            trigger="cron",
-            hour=hour,
-            minute=minute,
-            timezone=timezone_str,
-        )
+        # Per-topic cron jobs
+        self._register_topic_jobs(self.config, timezone_str)
 
-        # Phase 6: Weekly report — every Sunday at 09:00
-        # By default we use the same user's timezone, or leave it hardcoded to 9AM in their timezone
+        # Phase 6: Weekly report — every Sunday at 09:00 in user's timezone
         self.weekly_job = self.scheduler.add_job(
             self.weekly_report_task,
             trigger="cron",
@@ -331,41 +415,43 @@ class InterviewScheduler:
         )
 
         self.scheduler.start()
-        logger.info(
-            f"✅ [{self.phone_number}] Scheduler started — "
-            f"daily at {self.schedule_time} ({timezone_str})"
-        )
+        logger.info(f"✅ [{self.phone_number}] Scheduler started with per-topic times.")
 
-        # Start background task to hot-reload config changes
         asyncio.create_task(self._watch_config())
 
     async def _watch_config(self):
-        """Background task that polls for config changes and hot-reloads the scheduler."""
+        """Background task that polls for config changes every 60s and hot-reloads jobs."""
+        last_snapshot = self.config.model_dump()
+
         while True:
-            await asyncio.sleep(60)  # Check every 1 minute
+            await asyncio.sleep(60)
             try:
                 new_cfg = ConfigManager.load_config(self.phone_number)
-                new_tz = getattr(new_cfg, "timezone", "UTC")
-                
-                if new_cfg.schedule_time != self.schedule_time or new_tz != getattr(self.config, "timezone", "UTC"):
-                    logger.info(f"🔄 [{self.phone_number}] Config change detected. Hot-reloading scheduler...")
-                    self.config = new_cfg
-                    self.schedule_time = new_cfg.schedule_time
-                    hour, minute = map(int, self.schedule_time.split(":"))
+                new_snapshot = new_cfg.model_dump()
 
-                    self.daily_job.reschedule(
-                        trigger="cron",
-                        hour=hour,
-                        minute=minute,
-                        timezone=new_tz
-                    )
+                if new_snapshot != last_snapshot:
+                    logger.info(f"🔄 [{self.phone_number}] Config change detected — hot-reloading per-topic jobs...")
+                    new_tz = getattr(new_cfg, "timezone", "UTC")
+                    self.config = new_cfg
+                    last_snapshot = new_snapshot
+
+                    # Remove old topic jobs and re-register
+                    for job in getattr(self, "_topic_jobs", []):
+                        try:
+                            job.remove()
+                        except Exception:
+                            pass
+                    self._register_topic_jobs(new_cfg, new_tz)
+
+                    # Reschedule weekly report timezone
                     self.weekly_job.reschedule(
                         trigger="cron",
                         day_of_week="sun",
                         hour=9,
                         minute=0,
-                        timezone=new_tz
+                        timezone=new_tz,
                     )
-                    logger.info(f"✅ [{self.phone_number}] Scheduler hot-reloaded to {self.schedule_time} ({new_tz})")
+                    logger.info(f"✅ [{self.phone_number}] Per-topic jobs hot-reloaded.")
             except Exception as e:
-                logger.error(f"Error checking config for hot-reload: {e}")
+                logger.error(f"Config watch error: {e}")
+

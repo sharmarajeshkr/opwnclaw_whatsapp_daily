@@ -15,6 +15,7 @@ from typing import Optional
 import psutil
 
 from src.core.config import ConfigManager
+from src.core.db import get_conn
 from src.core.logger import get_logger
 
 logger = get_logger("Utils")
@@ -101,15 +102,22 @@ def stop_all_bots() -> None:
 
 
 def delete_user_data(phone_number: str) -> None:
-    """Delete all on-disk data associated with a user."""
-    # Stop the bot if it's currently running to release SQLite file locks
+    """Delete all database and on-disk data associated with a user."""
+    # Stop the bot if it's currently running to release session locks
     stop_bot(phone_number)
     
+    # 1. Database Cleanup
+    with get_conn() as conn:
+        conn.execute("DELETE FROM user_configs WHERE phone_number = %s", (phone_number,))
+        conn.execute("DELETE FROM user_history WHERE phone_number = %s", (phone_number,))
+        conn.execute("DELETE FROM performance_scores WHERE phone_number = %s", (phone_number,))
+        conn.execute("DELETE FROM user_status WHERE phone_number = %s", (phone_number,))
+        conn.execute("DELETE FROM sessions WHERE phone_number = %s", (phone_number,))
+
+    # 2. Filesystem Cleanup (Legacy/System files)
     paths = [
-        ConfigManager.get_config_path(phone_number),
         os.path.join("data", "users", f"{phone_number}.sqlite3"),
         os.path.join("data", f"qr_{phone_number}.png"),
-        os.path.join("data", "history", f"{phone_number}.json"),
     ]
     for p in paths:
         if os.path.exists(p):
@@ -123,17 +131,12 @@ def delete_user_data(phone_number: str) -> None:
 
 def is_user_paired(phone: str) -> bool:
     """
-    Check if a user is paired. The sqlite3 session file is created immediately
-    by neonize, so we can't just check its existence. If the qr png is present
-    or missing completely without the DB, they are not paired.
+    Check if a user is paired by querying the user_status table.
     """
-    session_path = os.path.join("data", "users", f"{phone}.sqlite3")
-    qr_path = os.path.join("data", f"qr_{phone}.png")
-
-    session_exists = os.path.exists(session_path)
-
-    # A user is paired only if their session file exists AND they don't have a pending QR scan.
-    return session_exists and not os.path.exists(qr_path)
+    with get_conn() as conn:
+        row = conn.execute("SELECT is_paired FROM user_status WHERE phone_number = %s", (phone,)).fetchone()
+    
+    return row["is_paired"] if row else False
 
 
 # ── QR / Pairing Script ───────────────────────────────────────────────────────

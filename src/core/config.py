@@ -1,19 +1,20 @@
 import json
-import os
-import glob
 from typing import Dict, Any, List
 from pydantic import BaseModel, Field
 from cryptography.fernet import Fernet
-from src.core.env import get_fernet_key
-
-USERS_DIR = os.path.join("data", "users")
+from src.core.sys_config import settings
 
 class TopicsConfig(BaseModel):
     topic_1: str = "Architecture Challenge"
+    topic_1_time: str = ""   # custom time e.g. "08:30" — empty = use global schedule_time
     topic_2: str = "Kafka"
+    topic_2_time: str = ""
     topic_3: str = "Agentic AI"
+    topic_3_time: str = ""
     topic_4: str = "AI News"
+    topic_4_time: str = ""
     topic_5: str = "Latest Global News"
+    topic_5_time: str = ""
 
 class ChannelsConfig(BaseModel):
     whatsapp_target: str = ""
@@ -22,26 +23,17 @@ class ChannelsConfig(BaseModel):
     slack_webhook_url: str = ""
 
 class UserConfig(BaseModel):
-    schedule_time: str = "20:00"
+    schedule_time: str = "20:00"   # global fallback if a topic has no individual time
     timezone: str = "Asia/Kolkata"
     pin_code: str = "0000"
     topics: TopicsConfig = Field(default_factory=TopicsConfig)
     channels: ChannelsConfig = Field(default_factory=ChannelsConfig)
 
+
 class ConfigManager:
     @staticmethod
-    def _ensure_users_dir():
-        if not os.path.exists(USERS_DIR):
-            os.makedirs(USERS_DIR, exist_ok=True)
-
-    @staticmethod
-    def get_config_path(phone_number: str) -> str:
-        ConfigManager._ensure_users_dir()
-        return os.path.join(USERS_DIR, f"{phone_number}_config.json")
-
-    @staticmethod
     def _get_fernet() -> Fernet | None:
-        key = get_fernet_key()
+        key = settings.FERNET_KEY
         if not key:
             return None
         return Fernet(key.encode("utf-8"))
@@ -78,19 +70,30 @@ class ConfigManager:
 
     @staticmethod
     def load_config(phone_number: str) -> UserConfig:
-        """Loads configuration for a specific user. Creates it with defaults if it doesn't exist."""
-        path = ConfigManager.get_config_path(phone_number)
-        if not os.path.exists(path):
-            config = UserConfig()
-            config.channels.whatsapp_target = phone_number
-            ConfigManager.save_config(phone_number, config)
-            return config
+        """Loads configuration for a specific user from PostgreSQL. Creates it with defaults if not found."""
+        from src.core.db import get_conn
         
         try:
-            with open(path, "r") as f:
-                data = json.load(f)
+            with get_conn() as conn:
+                row = conn.execute("SELECT * FROM user_configs WHERE phone_number = %s", (phone_number,)).fetchone()
+                
+            if not row:
+                config = UserConfig()
+                config.channels.whatsapp_target = phone_number
+                ConfigManager.save_config(phone_number, config)
+                return config
+            
+            # Map DB columns to Pydantic structure
+            data = {
+                "schedule_time": row["schedule_time"],
+                "timezone": row["timezone"],
+                "pin_code": row["pin_code"],
+                "topics": row["topics"],
+                "channels": row["channels"],
+            }
             data = ConfigManager._decrypt_dict(data)
             return UserConfig.model_validate(data)
+            
         except Exception as e:
             from src.core.logger import get_logger
             logger = get_logger("ConfigManager")
@@ -101,8 +104,9 @@ class ConfigManager:
 
     @staticmethod
     def save_config(phone_number: str, config: UserConfig | Dict[str, Any]):
-        """Saves configuration for a specific user to data/users/<num>_config.json."""
-        path = ConfigManager.get_config_path(phone_number)
+        """Upserts configuration for a specific user into PostgreSQL."""
+        from src.core.db import get_conn
+        
         if isinstance(config, UserConfig):
             data = config.model_dump()
         else:
@@ -110,13 +114,34 @@ class ConfigManager:
             
         # Standardise and encrypt
         data = ConfigManager._encrypt_dict(data)
-            
-        with open(path, "w") as f:
-            json.dump(data, f, indent=4)
+        
+        with get_conn() as conn:
+            conn.execute(
+                """
+                INSERT INTO user_configs (phone_number, schedule_time, timezone, pin_code, topics, channels, updated_at)
+                VALUES (%s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP)
+                ON CONFLICT (phone_number) DO UPDATE SET
+                    schedule_time = EXCLUDED.schedule_time,
+                    timezone = EXCLUDED.timezone,
+                    pin_code = EXCLUDED.pin_code,
+                    topics = EXCLUDED.topics,
+                    channels = EXCLUDED.channels,
+                    updated_at = CURRENT_TIMESTAMP
+                """,
+                (
+                    phone_number,
+                    data.get("schedule_time"),
+                    data.get("timezone"),
+                    data.get("pin_code"),
+                    json.dumps(data.get("topics", {})),
+                    json.dumps(data.get("channels", {}))
+                )
+            )
 
     @staticmethod
     def get_all_users() -> List[str]:
-        """Returns a list of phone numbers of all registered users."""
-        ConfigManager._ensure_users_dir()
-        files = glob.glob(os.path.join(USERS_DIR, "*_config.json"))
-        return [os.path.basename(f).replace("_config.json", "") for f in files]
+        """Returns a list of phone numbers of all registered users from PostgreSQL."""
+        from src.core.db import get_conn
+        with get_conn() as conn:
+            rows = conn.execute("SELECT phone_number FROM user_configs").fetchall()
+        return [row["phone_number"] for row in rows]

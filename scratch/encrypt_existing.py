@@ -5,12 +5,11 @@ import os
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from src.core.config import ConfigManager
-from src.core.env import load_env, get_fernet_key
+from src.core.sys_config import settings
 from cryptography.fernet import Fernet
 
 def main():
-    load_env()
-    key = get_fernet_key()
+    key = settings.FERNET_KEY
     
     if not key:
         print("[-] FERNET_KEY is not set in the environment. Exiting.")

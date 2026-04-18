@@ -2,32 +2,43 @@
 """
 tests/test_integration_coach_loop.py
 --------------------------------------
-Integration tests for the end-to-end coach loop:
+Integration tests for the end-to-end coach loop (PostgreSQL backend):
   Session → Score → Performance → Weak Topics → Weekly Report
 
 These tests wire SessionManager + PerformanceTracker together against
-a shared in-memory-style temp DB to verify the full flow works as one.
+a shared PostgreSQL test DB to verify the full flow works as one.
 
 No LLM calls, no WhatsApp — fully offline.
 """
 
 import json
+import os
 import pytest
 import asyncio
+import psycopg2
 from datetime import datetime, timezone, timedelta
 from unittest.mock import AsyncMock, MagicMock, patch
 
 
+from src.core.sys_config import settings
+
 # ── Fixture ────────────────────────────────────────────────────────────────────
 
 @pytest.fixture(autouse=True)
-def isolated_db(tmp_path, monkeypatch):
-    import src.core.db as db_module
-    temp_db = str(tmp_path / "integration_test.db")
-    monkeypatch.setattr(db_module, "DB_PATH", temp_db)
+def isolated_db():
+    settings.POSTGRES_DB = "openclaw_test"
+
     from src.core.db import init_db
     init_db()
-    yield temp_db
+    dsn = settings.get_database_url()
+    yield dsn
+
+    conn = psycopg2.connect(dsn)
+    conn.autocommit = True
+    cur = conn.cursor()
+    cur.execute("TRUNCATE TABLE sessions, performance_scores RESTART IDENTITY CASCADE")
+    cur.close()
+    conn.close()
 
 
 PHONE = "919123456789"
@@ -56,7 +67,6 @@ class TestFullCoachLoop:
         SessionManager.set_active_question(PHONE, QUESTION, TOPIC)
         session = SessionManager.get_active_session(PHONE)
 
-        # Simulate LLM evaluation result
         eval_result = {"score": 7, "feedback": "Good.", "weak_aspects": ["token bucket"]}
 
         PerformanceTracker.record_score(
@@ -72,11 +82,10 @@ class TestFullCoachLoop:
         summary = PerformanceTracker.get_weekly_summary(PHONE)
         assert len(summary) == 1
         assert summary[0]["topic"] == TOPIC
-        assert summary[0]["avg_score"] == 7.0
+        assert float(summary[0]["avg_score"]) == 7.0
 
     def test_weak_topic_detection_after_bad_answers(self, isolated_db):
         """Low scores on a topic should surface it in weak topics."""
-        from src.core.session import SessionManager
         from src.core.performance import PerformanceTracker
         from src.core.db import get_conn
 
@@ -86,7 +95,7 @@ class TestFullCoachLoop:
                 conn.execute(
                     "INSERT INTO performance_scores "
                     "(phone_number, topic, score, weak_aspects, feedback, answered_at) "
-                    "VALUES (?, ?, ?, ?, ?, ?)",
+                    "VALUES (%s, %s, %s, %s, %s, %s)",
                     (PHONE, "Kafka", score, json.dumps(["DLQ"]), "ok", answered)
                 )
 
@@ -103,7 +112,7 @@ class TestFullCoachLoop:
                 conn.execute(
                     "INSERT INTO performance_scores "
                     "(phone_number, topic, score, weak_aspects, feedback, answered_at) "
-                    "VALUES (?, ?, ?, ?, ?, ?)",
+                    "VALUES (%s, %s, %s, %s, %s, %s)",
                     (PHONE, "Redis", score, json.dumps([]), "ok", answered)
                 )
 
@@ -114,7 +123,6 @@ class TestFullCoachLoop:
         """Calling clear_all_stale (new daily cycle start) wipes unanswered session."""
         from src.core.session import SessionManager
         SessionManager.set_active_question(PHONE, QUESTION, TOPIC)
-        # Simulate: next day, daily_task fires without user having replied
         SessionManager.clear_all_stale(PHONE)
         assert SessionManager.get_active_session(PHONE) is None
 
@@ -134,7 +142,7 @@ class TestFullCoachLoop:
                 conn.execute(
                     "INSERT INTO performance_scores "
                     "(phone_number, topic, score, weak_aspects, feedback, answered_at) "
-                    "VALUES (?, ?, ?, ?, ?, ?)",
+                    "VALUES (%s, %s, %s, %s, %s, %s)",
                     (PHONE, topic, score, json.dumps([]), "ok", answered)
                 )
 
@@ -144,7 +152,7 @@ class TestFullCoachLoop:
         assert "Redis" in topics_in_summary
 
         kafka_row = next(r for r in summary if r["topic"] == "Kafka")
-        assert kafka_row["avg_score"] == 6.0
+        assert float(kafka_row["avg_score"]) == 6.0
         assert kafka_row["attempts"] == 2
 
 
@@ -159,14 +167,10 @@ class TestHandleIncoming:
     def _build_fake_message(self, phone: str, text: str):
         """Build a fake neonize MessageEv-like object."""
         msg = MagicMock()
-        
-        # Verify Message Source filters
         msg.Info.MessageSource.IsFromMe = True
-        
         chat_mock = MagicMock()
         chat_mock.User = phone
         msg.Info.MessageSource.Chat = chat_mock
-        
         msg.Message.conversation = text
         msg.Message.extendedTextMessage = MagicMock()
         msg.Message.extendedTextMessage.text = ""
@@ -198,12 +202,11 @@ class TestHandleIncoming:
             scheduler.agent = agent
             scheduler.whatsapp = wa
             scheduler.phone_number = PHONE
-            
-            # Mock config for handle_incoming filtering
+
             config_mock = MagicMock()
             config_mock.channels.whatsapp_target = PHONE
             scheduler.config = config_mock
-            
+
             return scheduler
 
     def run(self, coro):
@@ -211,13 +214,10 @@ class TestHandleIncoming:
 
     def test_no_session_does_not_send_feedback(self, isolated_db):
         """If no active session, incoming message is silently ignored."""
-        from src.core.session import SessionManager
-
         eval_result = {"score": 7, "feedback": "Good!", "weak_aspects": []}
         scheduler = self._build_scheduler(isolated_db, eval_result)
         msg = self._build_fake_message(PHONE, "My answer to nothing")
 
-        # No session set — handle_incoming should gracefully reply with fallback
         self.run(scheduler.handle_incoming(None, msg))
         scheduler.whatsapp.send_message.assert_called_once()
         call_arg = scheduler.whatsapp.send_message.call_args[0][0]
@@ -226,7 +226,6 @@ class TestHandleIncoming:
     def test_active_session_triggers_feedback(self, isolated_db):
         """With active session, valid reply should trigger send_message."""
         from src.core.session import SessionManager
-
         SessionManager.set_active_question(PHONE, QUESTION, TOPIC)
         eval_result = {"score": 8, "feedback": "Excellent!", "weak_aspects": []}
         scheduler = self._build_scheduler(isolated_db, eval_result)
@@ -249,7 +248,7 @@ class TestHandleIncoming:
 
         summary = PerformanceTracker.get_weekly_summary(PHONE)
         assert len(summary) == 1
-        assert summary[0]["avg_score"] == 6.0
+        assert float(summary[0]["avg_score"]) == 6.0
 
     def test_session_cleared_after_scoring(self, isolated_db):
         """Session must be cleared so next reply is not double-scored."""
@@ -285,9 +284,8 @@ class TestHandleIncoming:
         msg = self._build_fake_message(PHONE, "My answer.")
 
         self.run(scheduler.handle_incoming(None, msg))
-
         call_args = scheduler.whatsapp.send_message.call_args[0][0]
-        assert "5" in call_args  # score present in message
+        assert "5" in call_args
 
     def test_weak_aspects_included_in_feedback(self, isolated_db):
         """If weak_aspects present, they should appear in the feedback message."""
@@ -303,6 +301,5 @@ class TestHandleIncoming:
         msg = self._build_fake_message(PHONE, "My answer.")
 
         self.run(scheduler.handle_incoming(None, msg))
-
         call_args = scheduler.whatsapp.send_message.call_args[0][0]
         assert "token bucket" in call_args

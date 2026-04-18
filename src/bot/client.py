@@ -4,6 +4,7 @@ from neonize.aioze.client import NewAClient
 from neonize.utils.jid import build_jid
 from neonize.events import ConnectedEv, MessageEv, DisconnectedEv, LoggedOutEv
 import segno
+from src.core.db import get_conn
 from src.core.logger import get_logger
 
 logger = get_logger("WhatsAppClient")
@@ -56,6 +57,14 @@ class WhatsAppClient:
                     logger.debug(f"Deleted QR file {qr_file} after successful pairing.")
                 except Exception as e:
                     logger.warning(f"Could not delete QR file {qr_file}: {e}")
+            
+            # Update DB status
+            with get_conn() as conn:
+                conn.execute(
+                    "INSERT INTO user_status(phone_number, is_paired, updated_at) VALUES (%s, %s, CURRENT_TIMESTAMP) "
+                    "ON CONFLICT (phone_number) DO UPDATE SET is_paired = TRUE, updated_at = CURRENT_TIMESTAMP",
+                    (self.phone_number, True)
+                )
 
         @self.client.event(DisconnectedEv)
         async def on_disconnected(client: NewAClient, event: DisconnectedEv):
@@ -68,6 +77,14 @@ class WhatsAppClient:
             logger.error(f"❌ [{self.phone_number}] WhatsApp logged out. QR pairing required again.")
             self.connected = False
             self.is_ready.clear()
+            
+            # Update DB status
+            with get_conn() as conn:
+                conn.execute(
+                    "INSERT INTO user_status(phone_number, is_paired, updated_at) VALUES (%s, %s, CURRENT_TIMESTAMP) "
+                    "ON CONFLICT (phone_number) DO UPDATE SET is_paired = FALSE, updated_at = CURRENT_TIMESTAMP",
+                    (self.phone_number, False)
+                )
 
     async def connect(self, retries: int = 3, timeout: int = 90):
         """Standard connect for NewAClient with robust retry."""

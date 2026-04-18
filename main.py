@@ -1,7 +1,7 @@
 import asyncio
 import sys
 import os
-from src.core.env import load_env, get_interview_topic, require_llm_key
+from src.core.sys_config import settings
 from src.core.config import ConfigManager
 from src.core.db import init_db
 from src.core.logger import get_logger
@@ -41,8 +41,6 @@ async def main():
     parser.add_argument("--phone", type=str, help="Phone number for a single user bot")
     args = parser.parse_args()
 
-    load_env()
-
     # Initialise the coach SQLite DB (creates coach.db + tables if not present)
     init_db()
     
@@ -51,13 +49,11 @@ async def main():
     logger.info("---------------------------------------------")
 
     # Validate LLM keys early
-    try:
-        require_llm_key()
-    except ValueError as e:
-        logger.error(f"FATAL: {e}")
+    if not settings.OPENAI_API_KEY and not settings.GEMINI_API_KEY:
+        logger.error("FATAL: Neither OPENAI_API_KEY nor GEMINI_API_KEY is set in the environment.")
         sys.exit(1)
 
-    shared_topic = get_interview_topic()
+    shared_topic = settings.INTERVIEW_TOPIC
 
     if args.phone:
         # Single user mode
@@ -67,7 +63,8 @@ async def main():
         # All users mode (default)
         while True:
             all_users = ConfigManager.get_all_users()
-            paired_users = [u for u in all_users if os.path.exists(os.path.join("data", "users", f"{u}.sqlite3"))]
+            from src.core.utils import is_user_paired
+            paired_users = [u for u in all_users if is_user_paired(u)]
             
             if not paired_users:
                 logger.warning("⚠️ No paired users found. Add and pair users via the Streamlit dashboard.")

@@ -1,7 +1,7 @@
 """
 session.py
 ----------
-Manages per-user session state stored in the `sessions` table of coach.db.
+Manages per-user session state stored in the `sessions` table of PostgreSQL.
 
 QUEUE MODEL (v2 — GAP-04 fix):
   Previously the table used phone_number as PRIMARY KEY, so INSERT OR REPLACE
@@ -49,7 +49,7 @@ class SessionManager:
                 """
                 INSERT INTO sessions
                     (phone_number, question, topic, sent_at, awaiting_reply)
-                VALUES (?, ?, ?, ?, 1)
+                VALUES (%s, %s, %s, %s, 1)
                 """,
                 (phone, question, topic, now),
             )
@@ -69,7 +69,7 @@ class SessionManager:
                 """
                 SELECT id, question, topic, sent_at
                 FROM sessions
-                WHERE phone_number = ? AND awaiting_reply = 1
+                WHERE phone_number = %s AND awaiting_reply = 1
                 ORDER BY sent_at ASC
                 LIMIT 1
                 """,
@@ -96,7 +96,7 @@ class SessionManager:
         """
         with get_conn() as conn:
             conn.execute(
-                "UPDATE sessions SET awaiting_reply = 0 WHERE id = ?",
+                "UPDATE sessions SET awaiting_reply = 0 WHERE id = %s",
                 (session_id,),
             )
         logger.debug(f"Session id={session_id} cleared.")
@@ -111,7 +111,7 @@ class SessionManager:
         """
         with get_conn() as conn:
             conn.execute(
-                "UPDATE sessions SET awaiting_reply = 0 WHERE phone_number = ?",
+                "UPDATE sessions SET awaiting_reply = 0 WHERE phone_number = %s",
                 (phone,),
             )
         logger.debug(f"[{phone}] All stale sessions cleared before new daily cycle.")
@@ -121,8 +121,8 @@ class SessionManager:
         """Return how many questions are currently waiting for a reply."""
         with get_conn() as conn:
             row = conn.execute(
-                "SELECT COUNT(*) FROM sessions "
-                "WHERE phone_number = ? AND awaiting_reply = 1",
+                "SELECT COUNT(*) AS cnt FROM sessions "
+                "WHERE phone_number = %s AND awaiting_reply = 1",
                 (phone,),
             ).fetchone()
-        return row[0] if row else 0
+        return row["cnt"] if row else 0

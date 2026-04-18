@@ -50,7 +50,7 @@ class PerformanceTracker:
                 """
                 INSERT INTO performance_scores
                     (phone_number, topic, score, weak_aspects, feedback, answered_at)
-                VALUES (?, ?, ?, ?, ?, ?)
+                VALUES (%s, %s, %s, %s, %s, %s)
                 """,
                 (phone, topic, score, json.dumps(weak_aspects), feedback, now),
             )
@@ -71,16 +71,16 @@ class PerformanceTracker:
         """
         with get_conn() as conn:
             rows = conn.execute(
-                f"""
+                """
                 SELECT topic, AVG(score) AS avg_score
                 FROM performance_scores
-                WHERE phone_number = ?
-                  AND answered_at >= datetime('now', '-{lookback_days} days')
+                WHERE phone_number = %s
+                  AND answered_at::timestamptz >= NOW() - INTERVAL %s
                 GROUP BY topic
-                HAVING avg_score < ?
-                ORDER BY avg_score ASC
+                HAVING AVG(score) < %s
+                ORDER BY AVG(score) ASC
                 """,
-                (phone, threshold),
+                (phone, f"{lookback_days} days", threshold),
             ).fetchall()
         topics = [row["topic"] for row in rows]
         if topics:
@@ -102,15 +102,15 @@ class PerformanceTracker:
                 """
                 SELECT
                     topic,
-                    ROUND(AVG(score), 1)  AS avg_score,
-                    COUNT(*)              AS attempts,
-                    MIN(score)            AS min_score,
-                    MAX(score)            AS max_score
+                    ROUND(AVG(score)::numeric, 1)  AS avg_score,
+                    COUNT(*)                        AS attempts,
+                    MIN(score)                      AS min_score,
+                    MAX(score)                      AS max_score
                 FROM performance_scores
-                WHERE phone_number = ?
-                  AND answered_at >= datetime('now', '-7 days')
+                WHERE phone_number = %s
+                  AND answered_at::timestamptz >= NOW() - INTERVAL '7 days'
                 GROUP BY topic
-                ORDER BY avg_score ASC
+                ORDER BY AVG(score) ASC
                 """,
                 (phone,),
             ).fetchall()
@@ -127,14 +127,14 @@ class PerformanceTracker:
                 """
                 SELECT
                     topic,
-                    ROUND(AVG(score), 1)  AS avg_score,
-                    COUNT(*)              AS attempts,
-                    MIN(score)            AS min_score,
-                    MAX(score)            AS max_score
+                    ROUND(AVG(score)::numeric, 1)  AS avg_score,
+                    COUNT(*)                        AS attempts,
+                    MIN(score)                      AS min_score,
+                    MAX(score)                      AS max_score
                 FROM performance_scores
-                WHERE phone_number = ?
+                WHERE phone_number = %s
                 GROUP BY topic
-                ORDER BY avg_score ASC
+                ORDER BY AVG(score) ASC
                 """,
                 (phone,),
             ).fetchall()

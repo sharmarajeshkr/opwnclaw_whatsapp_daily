@@ -2,7 +2,7 @@
 """
 tests/test_session.py
 ---------------------
-Tests for src/core/session.py (SessionManager)
+Tests for src/core/session.py (SessionManager) — PostgreSQL backend.
 
 Covers:
   - set_active_question: inserts correct row
@@ -15,20 +15,31 @@ Covers:
   - Isolation: two different phones have independent sessions
 """
 
+import os
 import pytest
-import sqlite3
+import psycopg2
+import psycopg2.extras
 
 
-# ── Shared fixture: temp DB + init ─────────────────────────────────────────────
+from src.core.sys_config import settings
+
+# ── Fixture: temp DB + init ────────────────────────────────────────────────────
 
 @pytest.fixture(autouse=True)
-def isolated_db(tmp_path, monkeypatch):
-    import src.core.db as db_module
-    temp_db = str(tmp_path / "test_coach.db")
-    monkeypatch.setattr(db_module, "DB_PATH", temp_db)
+def isolated_db():
+    settings.POSTGRES_DB = "openclaw_test"
+
     from src.core.db import init_db
     init_db()
-    yield temp_db
+    dsn = settings.get_database_url()
+    yield dsn
+
+    conn = psycopg2.connect(dsn)
+    conn.autocommit = True
+    cur = conn.cursor()
+    cur.execute("TRUNCATE TABLE sessions, performance_scores RESTART IDENTITY CASCADE")
+    cur.close()
+    conn.close()
 
 
 PHONE = "919876543210"
@@ -37,53 +48,47 @@ QUESTION = "Explain Kafka consumer group rebalancing."
 TOPIC = "Kafka"
 
 
+def _fetch_sessions(dsn: str, phone: str) -> list:
+    conn = psycopg2.connect(dsn, cursor_factory=psycopg2.extras.RealDictCursor)
+    cur = conn.cursor()
+    cur.execute("SELECT * FROM sessions WHERE phone_number = %s ORDER BY sent_at ASC", (phone,))
+    rows = cur.fetchall()
+    cur.close()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
 # ── set_active_question ────────────────────────────────────────────────────────
 
 class TestSetActiveQuestion:
     def test_inserts_row(self, isolated_db):
         from src.core.session import SessionManager
         SessionManager.set_active_question(PHONE, QUESTION, TOPIC)
-        conn = sqlite3.connect(isolated_db)
-        row = conn.execute(
-            "SELECT * FROM sessions WHERE phone_number=?", (PHONE,)
-        ).fetchone()
-        conn.close()
-        assert row is not None
+        rows = _fetch_sessions(isolated_db, PHONE)
+        assert len(rows) == 1
 
     def test_awaiting_reply_is_1(self, isolated_db):
         from src.core.session import SessionManager
         SessionManager.set_active_question(PHONE, QUESTION, TOPIC)
-        conn = sqlite3.connect(isolated_db)
-        row = conn.execute(
-            "SELECT awaiting_reply FROM sessions WHERE phone_number=?", (PHONE,)
-        ).fetchone()
-        conn.close()
-        assert row[0] == 1
+        rows = _fetch_sessions(isolated_db, PHONE)
+        assert rows[0]["awaiting_reply"] == 1
 
     def test_enqueues_multiple_sessions(self, isolated_db):
         """Queue Model — multiple sessions can pend per phone."""
         from src.core.session import SessionManager
         SessionManager.set_active_question(PHONE, "Q1", "Kafka")
         SessionManager.set_active_question(PHONE, "Q2", "Redis")
-        conn = sqlite3.connect(isolated_db)
-        rows = conn.execute(
-            "SELECT topic FROM sessions WHERE phone_number=? ORDER BY sent_at ASC", (PHONE,)
-        ).fetchall()
-        conn.close()
+        rows = _fetch_sessions(isolated_db, PHONE)
         assert len(rows) == 2
-        assert rows[0][0] == "Kafka"
-        assert rows[1][0] == "Redis"
+        assert rows[0]["topic"] == "Kafka"
+        assert rows[1]["topic"] == "Redis"
 
     def test_stored_values_correct(self, isolated_db):
         from src.core.session import SessionManager
         SessionManager.set_active_question(PHONE, QUESTION, TOPIC)
-        conn = sqlite3.connect(isolated_db)
-        row = conn.execute(
-            "SELECT question, topic FROM sessions WHERE phone_number=?", (PHONE,)
-        ).fetchone()
-        conn.close()
-        assert row[0] == QUESTION
-        assert row[1] == TOPIC
+        rows = _fetch_sessions(isolated_db, PHONE)
+        assert rows[0]["question"] == QUESTION
+        assert rows[0]["topic"] == TOPIC
 
 
 # ── get_active_session ─────────────────────────────────────────────────────────
@@ -131,15 +136,15 @@ class TestGetActiveSession:
 class TestClearSession:
     def test_sets_awaiting_reply_to_zero(self, isolated_db):
         from src.core.session import SessionManager
+        from src.core.db import get_conn
         SessionManager.set_active_question(PHONE, QUESTION, TOPIC)
         session = SessionManager.get_active_session(PHONE)
         SessionManager.clear_session(session["id"])
-        conn = sqlite3.connect(isolated_db)
-        row = conn.execute(
-            "SELECT awaiting_reply FROM sessions WHERE id=?", (session["id"],)
-        ).fetchone()
-        conn.close()
-        assert row[0] == 0
+        with get_conn() as conn:
+            row = conn.execute(
+                "SELECT awaiting_reply FROM sessions WHERE id = %s", (session["id"],)
+            ).fetchone()
+        assert row["awaiting_reply"] == 0
 
     def test_clear_nonexistent_does_not_raise(self, isolated_db):
         """Clearing a session that doesn't exist should not raise."""

@@ -12,6 +12,7 @@ uvicorn[standard]
 psutil
 cryptography
 pytz
+psycopg2-binary
 
 # Dev Dependencies
 pytest
