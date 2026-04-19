@@ -215,3 +215,43 @@ def trigger_qr_script(raw: str) -> None:
         start_new_session=True,
     )
     logger.info(f"QR pairing script launched for +{raw}")
+
+# ── User Status Aggregator ────────────────────────────────────────────────────
+
+def get_user_status(phone: str) -> dict:
+    """
+    Returns a unified summary of a user's operational and performance status.
+    Used by the dashboard and API lists.
+    """
+    from app.database.db import get_conn
+    
+    # 1. Operational status
+    bot_running = is_bot_running(phone)
+    paired = is_user_paired(phone)
+    
+    # 2. Database status (streak, activity)
+    with get_conn() as conn:
+        row = conn.execute(
+            "SELECT is_active, current_streak, last_reply_at FROM user_status WHERE phone_number = %s",
+            (phone,)
+        ).fetchone()
+        
+    if row:
+        return {
+            "phone": phone,
+            "is_active": row["is_active"],
+            "is_paired": paired,
+            "is_bot_running": bot_running,
+            "current_streak": row["current_streak"] or 0,
+            "last_reply_at": row["last_reply_at"].isoformat() if row["last_reply_at"] else None
+        }
+    else:
+        # Fallback if status row not yet created
+        return {
+            "phone": phone,
+            "is_active": True,
+            "is_paired": paired,
+            "is_bot_running": bot_running,
+            "current_streak": 0,
+            "last_reply_at": None
+        }

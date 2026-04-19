@@ -257,8 +257,9 @@ class InterviewScheduler:
             self.logger.info(f"[{phone}] Evaluating answer for topic='{session['topic']}'...")
             level, week = self._get_progression_context()
             
-            # Allow follow-up if we haven't done one yet for this session
-            allow_follow_up = session.get("follow_up_count", 0) < 1
+            # Allow follow-up if we haven't done one yet for this session (limit: 3)
+            follow_up_limit = 3
+            allow_follow_up = session.get("follow_up_count", 0) < follow_up_limit
             
             result = await self.scoring_agent.evaluate_answer(
                 question=session["question"],
@@ -269,14 +270,16 @@ class InterviewScheduler:
 
             # ── Check for Follow-Up Question ───────────────────────────
             follow_up = result.get("follow_up_question")
-            if allow_follow_up and follow_up and follow_up.strip().lower() != "null":
-                self.logger.info(f"[{phone}] Sending follow-up for topic='{session['topic']}'")
+
+            if allow_follow_up and follow_up and follow_up.strip().lower() not in ("null", "none", ""):
+                self.logger.info(f"[{phone}] Sending follow-up for topic='{session['topic']}' (Turn {session.get('follow_up_count', 0) + 1})")
                 
                 # Update session instead of clearing it
                 SessionManager.update_session_with_follow_up(session["id"], follow_up.strip())
                 
-                # Send follow-up to user
-                await self.whatsapp.send_message(f"🤔 *Follow-up Question:*\n\n{follow_up.strip()}")
+                # Send the answer/mentorship feedback followed by the new question
+                mentorship_resp = f"💡 *Mentor Feedback:*\n\n{result['feedback']}\n\n🤔 *Follow-up:*\n{follow_up.strip()}"
+                await self.whatsapp.send_message(mentorship_resp)
                 return
 
             # ── If no follow-up, proceed to final scoring ──────────────

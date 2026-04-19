@@ -226,9 +226,18 @@ def get_session(phone: str):
 def get_performance(phone: str):
     phone = _clean_phone(phone)
     _require_user(phone)
-    return {"performance": PerformanceTracker.get_all_time_summary(phone)}
+    return {
+        "all_time": PerformanceTracker.get_all_time_summary(phone),
+        "weekly": PerformanceTracker.get_weekly_summary(phone),
+        "weak_topics": PerformanceTracker.get_weak_topics(phone),
+    }
 
 # ── System [Admin] ────────────────────────────────────────────────────────────
+
+@router.get("/api/system/leaderboard", tags=["System"])
+def get_leaderboard(limit: int = 5):
+    """Returns the top users across the entire system."""
+    return {"leaderboard": PerformanceTracker.get_leaderboard(limit)}
 
 @router.post("/api/system/start-all", tags=["System"])
 def start_all():

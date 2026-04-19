@@ -121,6 +121,11 @@ class TestParseEvalResponse:
         assert isinstance(result["feedback"], str)
         assert isinstance(result["weak_aspects"], list)
 
+    def test_follow_up_question_parsed(self):
+        raw = '{"score": 5, "feedback": "Answer here.", "weak_aspects": [], "follow_up_question": "What about X?"}'
+        result = self._parse(raw)
+        assert result["follow_up_question"] == "What about X?"
+
     def test_empty_string_returns_fallback(self):
         result = self._parse("")
         assert result["score"] == 5

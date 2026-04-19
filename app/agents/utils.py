@@ -117,7 +117,8 @@ def parse_eval_response(raw: str, topic: str) -> dict:
         return {
             "score": score,
             "feedback": to_whatsapp_style(data.get("feedback") or "Good attempt! Keep reviewing the concepts."),
-            "weak_aspects": data.get("weak_aspects") if isinstance(data.get("weak_aspects"), list) else []
+            "weak_aspects": data.get("weak_aspects") if isinstance(data.get("weak_aspects"), list) else [],
+            "follow_up_question": to_whatsapp_style(data.get("follow_up_question") or "")
         }
     except json.JSONDecodeError:
         styled_fallback = fallback.copy()
