@@ -19,7 +19,7 @@ import psycopg2
 import psycopg2.extras
 
 
-from src.core.sys_config import settings
+from app.core.config import settings
 
 # ── Fixture: override settings.POSTGRES_DB + init/truncate around every test ───────────
 
@@ -32,7 +32,7 @@ def isolated_db():
     # Force the test DB
     settings.POSTGRES_DB = "openclaw_test"
 
-    from src.core.db import init_db
+    from app.database.db import init_db
     init_db()
 
     dsn = settings.get_database_url()
@@ -107,7 +107,7 @@ class TestInitDb:
 
     def test_idempotent_double_call(self, isolated_db):
         """Calling init_db() twice must not raise."""
-        from src.core.db import init_db
+        from app.database.db import init_db
         init_db()  # called once by fixture; second call must also succeed
 
     def test_sessions_schema(self, isolated_db):
@@ -126,7 +126,7 @@ class TestInitDb:
 
 class TestGetConn:
     def test_commit_on_success(self, isolated_db):
-        from src.core.db import get_conn
+        from app.database.db import get_conn
         with get_conn() as conn:
             conn.execute(
                 "INSERT INTO sessions(phone_number, question, topic, sent_at) "
@@ -143,7 +143,7 @@ class TestGetConn:
         assert row is not None
 
     def test_rollback_on_exception(self, isolated_db):
-        from src.core.db import get_conn
+        from app.database.db import get_conn
         try:
             with get_conn() as conn:
                 conn.execute(

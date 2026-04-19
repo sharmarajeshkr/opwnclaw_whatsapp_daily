@@ -2,7 +2,7 @@ import os
 import asyncio
 from neonize.aioze.client import NewAClient
 from neonize.utils.jid import build_jid
-from src.core.sys_config import settings
+from app.core.config import settings
 
 async def main():
     session = settings.WHATSAPP_SESSION_NAME

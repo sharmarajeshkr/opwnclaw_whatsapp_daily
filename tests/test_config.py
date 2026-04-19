@@ -1,16 +1,15 @@
 import pytest
 import psycopg2
 from cryptography.fernet import Fernet
-from src.core.config import ConfigManager, UserConfig
-from src.core.sys_config import settings
+from app.core.config import ConfigManager, UserConfig, settings
 
 @pytest.fixture(autouse=True)
 def isolated_db():
     settings.POSTGRES_DB = "openclaw_test"
-    from src.core.db import init_db
+    from app.database.db import init_db
     init_db()
     
-    from src.core.db import get_conn
+    from app.database.db import get_conn
     yield get_conn()
 
     # Teardown
@@ -36,7 +35,7 @@ def test_fernet_encryption_works():
     ConfigManager.save_config(phone, cfg)
 
     # Inspect raw DB row
-    from src.core.db import get_conn
+    from app.database.db import get_conn
     with get_conn() as conn:
         row = conn.execute("SELECT channels FROM user_configs WHERE phone_number = %s", (phone,)).fetchone()
     
@@ -64,7 +63,7 @@ def test_plaintext_fallback_when_no_key():
 
     ConfigManager.save_config(phone, cfg)
 
-    from src.core.db import get_conn
+    from app.database.db import get_conn
     with get_conn() as conn:
         row = conn.execute("SELECT channels FROM user_configs WHERE phone_number = %s", (phone,)).fetchone()
     

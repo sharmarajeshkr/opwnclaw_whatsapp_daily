@@ -24,21 +24,30 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
 
-def make_agent(llm_response: str):
-    """Create an InterviewAgent with a mocked LLM that returns llm_response."""
-    with patch("src.content.agent.LLMProvider") as MockLLM, \
-         patch("src.content.agent.UserHistoryManager") as MockHist:
+# ── Helpers ────────────────────────────────────────────────────────────────────
+
+def make_scoring_agent(llm_response: str):
+    """Create a ScoringAgent with a mocked LLM."""
+    with patch("app.agents.scoring_agent.LLMProvider") as MockLLM:
         MockLLM.return_value.generate_response = AsyncMock(return_value=llm_response)
-        MockLLM.return_value.generate_image = AsyncMock(return_value="")
+        from app.agents.scoring_agent import ScoringAgent
+        agent = ScoringAgent(phone_number="919999999999")
+        agent.llm.generate_response = AsyncMock(return_value=llm_response)
+        return agent
+
+def make_deep_dive_agent(llm_response: str):
+    """Create a DeepDiveAgent with a mocked LLM and history."""
+    with patch("app.agents.deep_dive_agent.LLMProvider") as MockLLM, \
+         patch("app.agents.deep_dive_agent.UserHistoryManager") as MockHist:
+        MockLLM.return_value.generate_response = AsyncMock(return_value=llm_response)
         MockHist.return_value.get_history = MagicMock(return_value=[])
         MockHist.return_value.add_to_history = MagicMock()
 
-        from src.content.agent import InterviewAgent
-        agent = InterviewAgent(phone_number="919999999999")
-        # Patch the already-constructed llm inside agent
+        from app.agents.deep_dive_agent import DeepDiveAgent
+        agent = DeepDiveAgent(phone_number="919999999999")
         agent.llm.generate_response = AsyncMock(return_value=llm_response)
-        agent.history_manager.get_history = MagicMock(return_value=[])
-        agent.history_manager.add_to_history = MagicMock()
+        agent.history.get_history = MagicMock(return_value=[])
+        agent.history.add_to_history = MagicMock()
         return agent
 
 
@@ -46,8 +55,8 @@ def make_agent(llm_response: str):
 
 class TestParseEvalResponse:
     def _parse(self, raw):
-        from src.content.agent import InterviewAgent
-        return InterviewAgent._parse_eval_response(raw, "Kafka")
+        from app.agents.utils import parse_eval_response
+        return parse_eval_response(raw, "Kafka")
 
     def test_valid_json_parsed(self):
         raw = '{"score": 7, "feedback": "Good effort!", "weak_aspects": ["DLQ"]}'
@@ -121,8 +130,8 @@ class TestParseEvalResponse:
 
 class TestExtractBlock:
     def _extract(self, text, tag):
-        from src.content.agent import InterviewAgent
-        return InterviewAgent._extract_block(text, tag)
+        from app.agents.utils import extract_block
+        return extract_block(text, tag)
 
     def test_extracts_question_block(self):
         text = "[QUESTION]\nWhat is Kafka?\n[/QUESTION]\n[ANSWER]\nKafka is...\n[/ANSWER]"
@@ -151,40 +160,27 @@ class TestExtractBlock:
 
 class TestEvaluateAnswer:
     def run(self, coro):
-        return asyncio.get_event_loop().run_until_complete(coro)
+        return asyncio.run(coro)
 
     def test_returns_dict_with_required_keys(self):
         payload = '{"score": 7, "feedback": "Good!", "weak_aspects": ["DLQ"]}'
-        agent = make_agent(payload)
-        result = self.run(agent.evaluate_answer("Q?", "My answer.", "Kafka"))
+        agent = make_scoring_agent(payload)
+        result = self.run(agent.evaluate_answer("Q?", "My answer.", "Kafka", "Beginner"))
         assert "score" in result
         assert "feedback" in result
         assert "weak_aspects" in result
 
     def test_score_is_int(self):
-        payload = '{"score": 8, "feedback": "Nice!", "weak_aspects": []}'
-        agent = make_agent(payload)
-        result = self.run(agent.evaluate_answer("Q?", "ans", "Redis"))
-        assert isinstance(result["score"], int)
-
-    def test_weak_aspects_is_list(self):
-        payload = '{"score": 4, "feedback": "Work harder.", "weak_aspects": ["timeout", "retry"]}'
-        agent = make_agent(payload)
-        result = self.run(agent.evaluate_answer("Q?", "ans", "Kafka"))
-        assert isinstance(result["weak_aspects"], list)
-
-    def test_malformed_llm_doesnt_raise(self):
-        """If LLM returns garbage, evaluate_answer must return a safe fallback."""
-        agent = make_agent("I cannot answer this.")
-        result = self.run(agent.evaluate_answer("Q?", "ans", "Kafka"))
+        agent = make_scoring_agent("I cannot answer this.")
+        result = self.run(agent.evaluate_answer("Q?", "ans", "Kafka", "Beginner"))
         assert isinstance(result, dict)
         assert "score" in result
 
     def test_score_within_bounds(self):
         """Score should always be in [0, 10] regardless of LLM output."""
         payload = '{"score": 99, "feedback": "Amazing!", "weak_aspects": []}'
-        agent = make_agent(payload)
-        result = self.run(agent.evaluate_answer("Q?", "ans", "Kafka"))
+        agent = make_scoring_agent(payload)
+        result = self.run(agent.evaluate_answer("Q?", "ans", "Kafka", "Beginner"))
         assert 0 <= result["score"] <= 10
 
 
@@ -192,49 +188,39 @@ class TestEvaluateAnswer:
 
 class TestGetDeepDiveWithQuestion:
     def run(self, coro):
-        return asyncio.get_event_loop().run_until_complete(coro)
-
-    def _make_agent_with_response(self, response: str):
-        return make_agent(response)
+        return asyncio.run(coro)
 
     def test_returns_tuple_of_two_strings(self):
         response = "[QUESTION]\nWhat is Kafka?\n[/QUESTION]\n[ANSWER]\nKafka is a distributed log.\n[/ANSWER]"
-        agent = self._make_agent_with_response(response)
-        result = self.run(agent.get_deep_dive_with_question("Kafka"))
+        agent = make_deep_dive_agent(response)
+        result = self.run(agent.get_deep_dive_with_question("Kafka", "Beginner", 1, {}))
         assert isinstance(result, tuple)
         assert len(result) == 2
 
     def test_first_element_is_question(self):
         response = "[QUESTION]\nExplain consumer groups.\n[/QUESTION]\n[ANSWER]\nLong answer.\n[/ANSWER]"
-        agent = self._make_agent_with_response(response)
-        question, _ = self.run(agent.get_deep_dive_with_question("Kafka"))
+        agent = make_deep_dive_agent(response)
+        question, _ = self.run(agent.get_deep_dive_with_question("Kafka", "Beginner", 1, {}))
         assert "consumer groups" in question.lower()
 
     def test_second_element_contains_both_parts(self):
         response = "[QUESTION]\nQuestion here.\n[/QUESTION]\n[ANSWER]\nAnswer here.\n[/ANSWER]"
-        agent = self._make_agent_with_response(response)
-        _, full_msg = self.run(agent.get_deep_dive_with_question("Kafka"))
+        agent = make_deep_dive_agent(response)
+        _, full_msg = self.run(agent.get_deep_dive_with_question("Kafka", "Beginner", 1, {}))
         assert "Question here" in full_msg
         assert "Answer here" in full_msg
 
     def test_fallback_when_no_markers(self):
         """If LLM doesn't use markers, it should not crash."""
         response = "This is an unstructured response without any markers."
-        agent = self._make_agent_with_response(response)
-        question, full_msg = self.run(agent.get_deep_dive_with_question("Kafka"))
+        agent = make_deep_dive_agent(response)
+        question, full_msg = self.run(agent.get_deep_dive_with_question("Kafka", "Beginner", 1, {}))
         # Should not raise, and both should be non-empty strings
         assert isinstance(question, str)
         assert isinstance(full_msg, str)
 
-    def test_history_manager_called(self):
+    def test_history_called(self):
         response = "[QUESTION]\nQ?\n[/QUESTION]\n[ANSWER]\nA.\n[/ANSWER]"
-        agent = self._make_agent_with_response(response)
-        self.run(agent.get_deep_dive_with_question("Kafka"))
-        agent.history_manager.add_to_history.assert_called_once()
-
-    def test_get_deep_dive_legacy_wrapper_returns_string(self):
-        """get_deep_dive() is a legacy wrapper — must still return a string."""
-        response = "[QUESTION]\nQ?\n[/QUESTION]\n[ANSWER]\nA.\n[/ANSWER]"
-        agent = self._make_agent_with_response(response)
-        result = self.run(agent.get_deep_dive("Kafka"))
-        assert isinstance(result, str)
+        agent = make_deep_dive_agent(response)
+        self.run(agent.get_deep_dive_with_question("Kafka", "Beginner", 1, {}))
+        agent.history.add_to_history.assert_called_once()

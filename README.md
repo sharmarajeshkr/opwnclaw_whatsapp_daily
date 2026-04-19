@@ -1,4 +1,4 @@
-# OpenClaw WhatsApp Interview Bot
+# Interview WhatsApp Interview Bot
 
 A professional, high-scale interview preparation bot that delivers deep-dive architectural challenges, technical solutions, and fresh industry insights directly to your WhatsApp.
 
@@ -21,7 +21,7 @@ A professional, high-scale interview preparation bot that delivers deep-dive arc
 ## 📦 Project Structure
 
 ```text
-openClaw_Interview/
+Interview_Interview/
 ├── src/
 │   ├── agent.py            # AI Prompting & Content Generation
 │   ├── history_manager.py  # Uniqueness & Data Persistence

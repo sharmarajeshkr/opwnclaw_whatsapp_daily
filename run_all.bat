@@ -4,7 +4,7 @@ setlocal enabledelayedexpansion
 :: ────────────────────────────────────────────────────────────────────────────
 :: CONFIGURATION
 :: ────────────────────────────────────────────────────────────────────────────
-set APP_NAME=OpenClaw All-in-One Launcher
+set APP_NAME=Interview All-in-One Launcher
 set VENV_PATH=.\venv
 set PYTHON_EXE=%VENV_PATH%\Scripts\python.exe
 set STREAMLIT_EXE=%VENV_PATH%\Scripts\streamlit.exe
@@ -14,7 +14,7 @@ cls
 
 :: ── Professional Header ─────────────────────────────────────────────────────
 powershell -Command "Write-Host '--------------------------------------------------' -ForegroundColor Cyan"
-powershell -Command "Write-Host '      OpenClaw - Multi-User Bot Launcher         ' -ForegroundColor White -BackgroundColor Blue"
+powershell -Command "Write-Host '      Interview - Multi-User Bot Launcher         ' -ForegroundColor White -BackgroundColor Blue"
 powershell -Command "Write-Host '--------------------------------------------------' -ForegroundColor Cyan"
 echo.
 
@@ -59,11 +59,11 @@ powershell -Command "$p = Get-Process python -ErrorAction SilentlyContinue | Whe
 :: ── Launching ───────────────────────────────────────────────────────────────
 echo.
 powershell -Command "Write-Host '[1/2] Launching Bot Daemon (main.py)...' -ForegroundColor Cyan"
-start "OpenClaw Daemon" /min "%PYTHON_EXE%" main.py
+start "Interview Daemon" /min "%PYTHON_EXE%" main.py
 
 powershell -Command "Write-Host '[2/2] Launching Dashboard UI (app.py)...' -ForegroundColor Cyan"
 echo.
-"%STREAMLIT_EXE%" run app.py
+"%STREAMLIT_EXE%" run dashboard.py
 
 if %ERRORLEVEL% neq 0 (
     echo.

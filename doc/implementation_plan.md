@@ -2,7 +2,7 @@
 
 ## Overview
 
-Right now OpenClaw is a **one-way broadcaster**: it pushes content but never reads replies, never scores answers, and never adapts. This plan adds the complete **Question → Reply → Score → Memory → Adapt → Weekly Trend** loop without breaking any existing functionality.
+Right now Interview is a **one-way broadcaster**: it pushes content but never reads replies, never scores answers, and never adapts. This plan adds the complete **Question → Reply → Score → Memory → Adapt → Weekly Trend** loop without breaking any existing functionality.
 
 ### Storage Decision: SQLite (Built-in, Zero New Dependencies)
 

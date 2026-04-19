@@ -1,4 +1,4 @@
-# OpenClaw — Deep Project Analysis & Gap Report
+# Interview — Deep Project Analysis & Gap Report
 
 > **Branch:** `analysis/gap-analysis`
 > **Date:** 2026-04-17
@@ -9,7 +9,7 @@
 
 ## Executive Summary
 
-OpenClaw is a well-architected, multi-user WhatsApp AI Interview Coaching bot with a Streamlit
+Interview is a well-architected, multi-user WhatsApp AI Interview Coaching bot with a Streamlit
 dashboard, REST API, adaptive learning loop, and multi-channel delivery. The core features are
 solid, but **23 gaps** were identified across security, reliability, correctness, scalability,
 and code quality that prevent it from being production-ready.

@@ -1,93 +1,95 @@
+"""
+main.py
+-------
+Main entry point for the Interview Multi-User Bot Daemon.
+Orchestrates connectivity and scheduling for all registered and paired users.
+"""
 import asyncio
 import sys
 import os
-from src.core.sys_config import settings
-from src.core.config import ConfigManager
-from src.core.db import init_db
-from src.core.logger import get_logger
-from src.content.agent import InterviewAgent
-from src.bot.client import WhatsAppClient
-from src.scheduling.scheduler import InterviewScheduler
+import argparse
+
+from app.core.config import settings, ConfigManager
+from app.database.db import init_db
+from app.core.logging import get_logger
+from app.channels.whatsapp.client import WhatsAppClient
+from app.services.scheduler import InterviewScheduler
+from app.core.utils import is_user_paired
 
 logger = get_logger("Main")
 
-async def run_user_bot(phone_number: str, shared_topic: str):
+async def run_user_bot(phone_number: str):
     """Initialize and run WhatsApp bot + scheduler for a single user."""
     logger.info(f"🚀 Initializing bot for user: {phone_number}")
     
-    # Each user gets their own agent instance (with their own history)
-    agent = InterviewAgent(phone_number=phone_number, topic=shared_topic)
+    # Initialize the client first
     whatsapp = WhatsAppClient(phone_number=phone_number)
-    scheduler = InterviewScheduler(agent, whatsapp, phone_number=phone_number)
+    
+    # The Scheduler now handles its own specialized agents internally
+    scheduler = InterviewScheduler(whatsapp, phone_number=phone_number)
     
     await scheduler.start()
 
-    # Keep this user's concurrent task alive and monitor connection
+    # Monitor connection and keep the task alive
     while True:
         await asyncio.sleep(60)
         logger.debug(f"Heartbeat — {phone_number} (Connected: {whatsapp.connected})")
         if not whatsapp.connected:
-            logger.warning(f"🔄 [{phone_number}] Connection drop detected in heartbeat. Reconnecting...")
+            logger.warning(f"🔄 [{phone_number}] Connection drop detected. Reconnecting...")
             try:
                 await whatsapp.connect()
             except Exception as e:
                 logger.error(f"❌ [{phone_number}] Reconnect failed: {e}")
 
-import argparse
-
 async def main():
-    """Main entry point — orchestration of all registered users."""
-    parser = argparse.ArgumentParser(description="OpenClaw WhatsApp Bot Daemon")
-    parser.add_argument("--phone", type=str, help="Phone number for a single user bot")
+    """System entry point — orchestration of paired users."""
+    parser = argparse.ArgumentParser(description="Interview WhatsApp Bot Daemon")
+    parser.add_argument("--phone", type=str, help="Phone number for a single user bot (digits only)")
     args = parser.parse_args()
 
-    # Initialise the coach SQLite DB (creates coach.db + tables if not present)
+    # Initialize PostgreSQL schema
     init_db()
     
-    logger.info("---------------------------------------------")
-    logger.info("      OpenClaw Multi-User Bot Daemon         ")
-    logger.info("---------------------------------------------")
+    logger.info("=============================================")
+    logger.info("      Interview Multi-User Bot Daemon         ")
+    logger.info("=============================================")
 
-    # Validate LLM keys early
+    # Security check: Ensure LLM keys are present
     if not settings.OPENAI_API_KEY and not settings.GEMINI_API_KEY:
-        logger.error("FATAL: Neither OPENAI_API_KEY nor GEMINI_API_KEY is set in the environment.")
+        logger.error("FATAL: No LLM API keys found in environment (OPENAI_API_KEY or GEMINI_API_KEY).")
         sys.exit(1)
 
-    shared_topic = settings.INTERVIEW_TOPIC
-
     if args.phone:
-        # Single user mode
+        # Single user mode (often used for debugging or manual starts)
         phone = args.phone.strip().lstrip("+")
-        await run_user_bot(phone, shared_topic)
+        await run_user_bot(phone)
     else:
-        # All users mode (default)
+        # Multi-user mode (default)
+        logger.info("Scanning for paired users...")
         while True:
             all_users = ConfigManager.get_all_users()
-            from src.core.utils import is_user_paired
             paired_users = [u for u in all_users if is_user_paired(u)]
             
             if not paired_users:
-                logger.warning("⚠️ No paired users found. Add and pair users via the Streamlit dashboard.")
-                logger.info("Waiting for a user to be paired... (polling every 30s)")
+                logger.info("⏳ No paired users found. Polling every 30s...")
                 await asyncio.sleep(30)
             else:
-                logger.info(f"✅ Found {len(paired_users)} paired users. Starting...")
+                logger.info(f"✅ Found {len(paired_users)} paired users: {paired_users}")
                 break
 
-        logger.info(f"📋 Initializing bots for paired users: {paired_users}")
-
-        # Launch concurrent tasks for all paired users
-        tasks = [asyncio.create_task(run_user_bot(phone, shared_topic)) for phone in paired_users]
-
-        logger.info(f"✅ {len(tasks)} user bots are now active.")
+        # Launch concurrent bot tasks
+        tasks = [asyncio.create_task(run_user_bot(phone)) for phone in paired_users]
+        logger.info(f"🚀 {len(tasks)} user bots are now active.")
 
         try:
             await asyncio.gather(*tasks)
         except KeyboardInterrupt:
-            logger.info("Termination signal received. Shutting down...")
+            logger.info("Shutdown signal received.")
 
 if __name__ == "__main__":
     try:
+        if sys.platform == "win32":
+            asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
         asyncio.run(main())
     except KeyboardInterrupt:
         pass

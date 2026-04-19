@@ -20,7 +20,7 @@ from datetime import datetime, timezone, timedelta
 from unittest.mock import AsyncMock, MagicMock, patch
 
 
-from src.core.sys_config import settings
+from app.core.config import settings
 
 # ── Fixture ────────────────────────────────────────────────────────────────────
 
@@ -28,7 +28,7 @@ from src.core.sys_config import settings
 def isolated_db():
     settings.POSTGRES_DB = "openclaw_test"
 
-    from src.core.db import init_db
+    from app.database.db import init_db
     init_db()
     dsn = settings.get_database_url()
     yield dsn
@@ -52,7 +52,7 @@ class TestFullCoachLoop:
 
     def test_session_set_and_retrieved(self, isolated_db):
         """Bot sends question → session stored → can be retrieved."""
-        from src.core.session import SessionManager
+        from app.services.session_manager import SessionManager
         SessionManager.set_active_question(PHONE, QUESTION, TOPIC)
         session = SessionManager.get_active_session(PHONE)
         assert session is not None
@@ -61,8 +61,8 @@ class TestFullCoachLoop:
 
     def test_score_recorded_after_reply(self, isolated_db):
         """After user replies and answer is evaluated, score is stored."""
-        from src.core.session import SessionManager
-        from src.core.performance import PerformanceTracker
+        from app.services.performance_tracker import PerformanceTracker
+        from app.services.session_manager import SessionManager
 
         SessionManager.set_active_question(PHONE, QUESTION, TOPIC)
         session = SessionManager.get_active_session(PHONE)
@@ -86,8 +86,8 @@ class TestFullCoachLoop:
 
     def test_weak_topic_detection_after_bad_answers(self, isolated_db):
         """Low scores on a topic should surface it in weak topics."""
-        from src.core.performance import PerformanceTracker
-        from src.core.db import get_conn
+        from app.services.performance_tracker import PerformanceTracker
+        from app.database.db import get_conn
 
         for score in [3, 4, 2]:
             answered = datetime.now(timezone.utc).isoformat()
@@ -103,8 +103,8 @@ class TestFullCoachLoop:
         assert "Kafka" in weak
 
     def test_strong_performance_not_flagged_weak(self, isolated_db):
-        from src.core.performance import PerformanceTracker
-        from src.core.db import get_conn
+        from app.services.performance_tracker import PerformanceTracker
+        from app.database.db import get_conn
 
         for score in [8, 9, 7]:
             answered = datetime.now(timezone.utc).isoformat()
@@ -121,15 +121,15 @@ class TestFullCoachLoop:
 
     def test_stale_session_cleared_on_new_day(self, isolated_db):
         """Calling clear_all_stale (new daily cycle start) wipes unanswered session."""
-        from src.core.session import SessionManager
+        from app.services.session_manager import SessionManager
         SessionManager.set_active_question(PHONE, QUESTION, TOPIC)
         SessionManager.clear_all_stale(PHONE)
         assert SessionManager.get_active_session(PHONE) is None
 
     def test_weekly_report_format_data(self, isolated_db):
         """Weekly summary returns correct structure for report formatting."""
-        from src.core.performance import PerformanceTracker
-        from src.core.db import get_conn
+        from app.services.performance_tracker import PerformanceTracker
+        from app.database.db import get_conn
 
         topics_data = [
             ("Kafka", 5),
@@ -158,6 +158,11 @@ class TestFullCoachLoop:
 
 # ── Scheduler handle_incoming mock test ────────────────────────────────────────
 
+@patch("app.agents.interview_agent.LLMProvider")
+@patch("app.agents.interview_agent.UserHistoryManager")
+@patch("app.channels.whatsapp.handler.ChannelSender")
+@patch("app.core.config.ConfigManager.load_config")
+@patch("app.services.scheduler.user_antispam.consume", return_value=True)
 class TestHandleIncoming:
     """
     Tests for InterviewScheduler.handle_incoming()
@@ -174,48 +179,40 @@ class TestHandleIncoming:
         msg.Message.conversation = text
         msg.Message.extendedTextMessage = MagicMock()
         msg.Message.extendedTextMessage.text = ""
+        
+        sender_mock = MagicMock()
+        sender_mock.User = phone
+        msg.Info.MessageSource.Sender = sender_mock
+        
         return msg
 
-    def _build_scheduler(self, isolated_db, eval_result: dict):
+    def _build_scheduler(self, isolated_db, eval_result: dict, mock_spam, mock_load, mock_sender, mock_hist, mock_llm):
         """Build an InterviewScheduler with all external deps mocked."""
-        with patch("src.content.agent.LLMProvider") as MockLLM, \
-             patch("src.content.agent.UserHistoryManager") as MockHist, \
-             patch("src.scheduling.scheduler.ChannelSender"), \
-             patch("src.scheduling.scheduler.ConfigManager"):
+        from app.services.scheduler import InterviewScheduler
+        from app.core.config import UserConfig
+        
+        mock_cfg = UserConfig()
+        mock_cfg.channels.whatsapp_target = PHONE
+        mock_load.return_value = mock_cfg
+        
+        mock_llm.return_value.generate_response = AsyncMock(return_value="")
+        
+        wa = MagicMock()
+        wa.send_message = AsyncMock()
 
-            MockLLM.return_value.generate_response = AsyncMock(return_value="")
-            MockLLM.return_value.generate_image = AsyncMock(return_value="")
-            MockHist.return_value.get_history = MagicMock(return_value=[])
-            MockHist.return_value.add_to_history = MagicMock()
+        scheduler = InterviewScheduler(whatsapp=wa, phone_number=PHONE)
+        # Patch the scoring agent specifically
+        scheduler.scoring_agent.evaluate_answer = AsyncMock(return_value=eval_result)
 
-            from src.content.agent import InterviewAgent
-            from src.scheduling.scheduler import InterviewScheduler
-
-            agent = InterviewAgent(phone_number=PHONE)
-            agent.evaluate_answer = AsyncMock(return_value=eval_result)
-
-            wa = MagicMock()
-            wa.send_message = AsyncMock()
-            wa.connected = True
-
-            scheduler = InterviewScheduler.__new__(InterviewScheduler)
-            scheduler.agent = agent
-            scheduler.whatsapp = wa
-            scheduler.phone_number = PHONE
-
-            config_mock = MagicMock()
-            config_mock.channels.whatsapp_target = PHONE
-            scheduler.config = config_mock
-
-            return scheduler
+        return scheduler
 
     def run(self, coro):
-        return asyncio.get_event_loop().run_until_complete(coro)
+        return asyncio.run(coro)
 
-    def test_no_session_does_not_send_feedback(self, isolated_db):
+    def test_no_session_does_not_send_feedback(self, mock_spam, mock_load, mock_sender, mock_hist, mock_llm, isolated_db):
         """If no active session, incoming message is silently ignored."""
         eval_result = {"score": 7, "feedback": "Good!", "weak_aspects": []}
-        scheduler = self._build_scheduler(isolated_db, eval_result)
+        scheduler = self._build_scheduler(isolated_db, eval_result, mock_spam, mock_load, mock_sender, mock_hist, mock_llm)
         msg = self._build_fake_message(PHONE, "My answer to nothing")
 
         self.run(scheduler.handle_incoming(None, msg))
@@ -223,25 +220,25 @@ class TestHandleIncoming:
         call_arg = scheduler.whatsapp.send_message.call_args[0][0]
         assert "an active question pending" in call_arg.lower()
 
-    def test_active_session_triggers_feedback(self, isolated_db):
+    def test_active_session_triggers_feedback(self, mock_spam, mock_load, mock_sender, mock_hist, mock_llm, isolated_db):
         """With active session, valid reply should trigger send_message."""
-        from src.core.session import SessionManager
+        from app.services.session_manager import SessionManager
         SessionManager.set_active_question(PHONE, QUESTION, TOPIC)
         eval_result = {"score": 8, "feedback": "Excellent!", "weak_aspects": []}
-        scheduler = self._build_scheduler(isolated_db, eval_result)
+        scheduler = self._build_scheduler(isolated_db, eval_result, mock_spam, mock_load, mock_sender, mock_hist, mock_llm)
         msg = self._build_fake_message(PHONE, "Detailed answer here.")
 
         self.run(scheduler.handle_incoming(None, msg))
         scheduler.whatsapp.send_message.assert_called_once()
 
-    def test_score_persisted_to_db(self, isolated_db):
+    def test_score_persisted_to_db(self, mock_spam, mock_load, mock_sender, mock_hist, mock_llm, isolated_db):
         """Score should be in performance_scores after handling reply."""
-        from src.core.session import SessionManager
-        from src.core.performance import PerformanceTracker
+        from app.services.performance_tracker import PerformanceTracker
+        from app.services.session_manager import SessionManager
 
         SessionManager.set_active_question(PHONE, QUESTION, TOPIC)
         eval_result = {"score": 6, "feedback": "Decent.", "weak_aspects": ["latency"]}
-        scheduler = self._build_scheduler(isolated_db, eval_result)
+        scheduler = self._build_scheduler(isolated_db, eval_result, mock_spam, mock_load, mock_sender, mock_hist, mock_llm)
         msg = self._build_fake_message(PHONE, "My answer.")
 
         self.run(scheduler.handle_incoming(None, msg))
@@ -250,46 +247,46 @@ class TestHandleIncoming:
         assert len(summary) == 1
         assert float(summary[0]["avg_score"]) == 6.0
 
-    def test_session_cleared_after_scoring(self, isolated_db):
+    def test_session_cleared_after_scoring(self, mock_spam, mock_load, mock_sender, mock_hist, mock_llm, isolated_db):
         """Session must be cleared so next reply is not double-scored."""
-        from src.core.session import SessionManager
+        from app.services.session_manager import SessionManager
 
         SessionManager.set_active_question(PHONE, QUESTION, TOPIC)
         eval_result = {"score": 7, "feedback": "Good!", "weak_aspects": []}
-        scheduler = self._build_scheduler(isolated_db, eval_result)
+        scheduler = self._build_scheduler(isolated_db, eval_result, mock_spam, mock_load, mock_sender, mock_hist, mock_llm)
         msg = self._build_fake_message(PHONE, "My answer.")
 
         self.run(scheduler.handle_incoming(None, msg))
         assert SessionManager.get_active_session(PHONE) is None
 
-    def test_empty_message_ignored(self, isolated_db):
+    def test_empty_message_ignored(self, mock_spam, mock_load, mock_sender, mock_hist, mock_llm, isolated_db):
         """Empty / whitespace-only message must be silently ignored."""
-        from src.core.session import SessionManager
+        from app.services.session_manager import SessionManager
 
         SessionManager.set_active_question(PHONE, QUESTION, TOPIC)
         eval_result = {"score": 7, "feedback": "Good!", "weak_aspects": []}
-        scheduler = self._build_scheduler(isolated_db, eval_result)
+        scheduler = self._build_scheduler(isolated_db, eval_result, mock_spam, mock_load, mock_sender, mock_hist, mock_llm)
         msg = self._build_fake_message(PHONE, "   ")
 
         self.run(scheduler.handle_incoming(None, msg))
         scheduler.whatsapp.send_message.assert_not_called()
 
-    def test_feedback_contains_score(self, isolated_db):
+    def test_feedback_contains_score(self, mock_spam, mock_load, mock_sender, mock_hist, mock_llm, isolated_db):
         """The feedback message sent to user must include the score."""
-        from src.core.session import SessionManager
+        from app.services.session_manager import SessionManager
 
         SessionManager.set_active_question(PHONE, QUESTION, TOPIC)
         eval_result = {"score": 5, "feedback": "Needs improvement.", "weak_aspects": ["retry"]}
-        scheduler = self._build_scheduler(isolated_db, eval_result)
+        scheduler = self._build_scheduler(isolated_db, eval_result, mock_spam, mock_load, mock_sender, mock_hist, mock_llm)
         msg = self._build_fake_message(PHONE, "My answer.")
 
         self.run(scheduler.handle_incoming(None, msg))
         call_args = scheduler.whatsapp.send_message.call_args[0][0]
         assert "5" in call_args
 
-    def test_weak_aspects_included_in_feedback(self, isolated_db):
+    def test_weak_aspects_included_in_feedback(self, mock_spam, mock_load, mock_sender, mock_hist, mock_llm, isolated_db):
         """If weak_aspects present, they should appear in the feedback message."""
-        from src.core.session import SessionManager
+        from app.services.session_manager import SessionManager
 
         SessionManager.set_active_question(PHONE, QUESTION, TOPIC)
         eval_result = {
@@ -297,7 +294,7 @@ class TestHandleIncoming:
             "feedback": "Weak answer.",
             "weak_aspects": ["token bucket", "sliding window"]
         }
-        scheduler = self._build_scheduler(isolated_db, eval_result)
+        scheduler = self._build_scheduler(isolated_db, eval_result, mock_spam, mock_load, mock_sender, mock_hist, mock_llm)
         msg = self._build_fake_message(PHONE, "My answer.")
 
         self.run(scheduler.handle_incoming(None, msg))

@@ -1,7 +1,7 @@
 """
 api.py
 ------
-FastAPI application entrypoint for OpenClaw.
+FastAPI application entrypoint for Interview.
 
 Run with:
     .\\venv\\Scripts\\uvicorn.exe api:app --reload --port 8000
@@ -27,9 +27,9 @@ Typical UI Integration Flow:
 from fastapi import FastAPI, Depends, HTTPException, status, Security
 from fastapi.security.api_key import APIKeyHeader
 from fastapi.middleware.cors import CORSMiddleware
-from src.api.routes import router
-from src.core.sys_config import settings
-from src.core.db import init_db
+from app.api.routes import router
+from app.core.config import settings
+from app.database.db import init_db
 
 # Initialize database schema
 init_db()
@@ -48,16 +48,16 @@ def verify_api_key(api_key: str = Security(api_key_header)):
     return api_key
 
 app = FastAPI(
-    title="OpenClaw Bot API",
+    title="Interview Bot API",
     description=(
-        "REST API for managing OpenClaw WhatsApp AI Interview Coach bots.\n\n"
+        "REST API for managing Interview WhatsApp AI Interview Coach bots.\n\n"
         "**Auth:** Pass `X-API-Key` header. Set `API_SECRET_KEY` in `.env`.\n\n"
         "**UI Flow:** Register → Trigger QR → Poll pairing → Login → Use features."
     ),
     version="2.0.0",
     docs_url="/docs",
     redoc_url="/redoc",
-    contact={"name": "OpenClaw", "url": "https://github.com/sharmarajeshkr/opwnclaw_whatsapp_daily"},
+    contact={"name": "Interview", "url": "https://github.com/sharmarajeshkr/opwnclaw_whatsapp_daily"},
 )
 
 # CORS — open for any UI origin (React, Vue, Angular, mobile apps, etc.)

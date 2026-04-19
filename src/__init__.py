@@ -1,1 +1,0 @@
-# OpenClaw — Python package root
