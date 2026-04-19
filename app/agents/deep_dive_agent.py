@@ -32,17 +32,30 @@ class DeepDiveAgent:
         
         response = await self.llm.generate_response(prompt)
         
-        # Robust extraction
-        question = extract_block(response, "QUESTION")
-        answer = extract_block(response, "ANSWER")
+        from app.agents.utils import parse_llm_json, to_whatsapp_style
         
-        # Fallback: if markers not found, treat first line as question and full as content
-        if not question or not answer:
-            logger.warning(f"[{topic}] Deep-dive markers not found — using fallback slicing.")
-            question = response.split('\n', 1)[0].strip()
-            full_content = response.strip()
+        # Try finding JSON first since prompt asks for it
+        parsed_data = parse_llm_json(response)
+        
+        if parsed_data and "full_message" in parsed_data and "question" in parsed_data:
+            question = parsed_data["question"]
+            full_message = parsed_data["full_message"]
+            full_content = to_whatsapp_style(full_message)
         else:
-            full_content = f"*Question:*\n{question}\n\n*Answer:*\n{answer}"
+            # Fallback to older [QUESTION] markers for legacy/test compatibility
+            question_block = extract_block(response, "QUESTION")
+            answer_block = extract_block(response, "ANSWER")
+            
+            if not question_block or not answer_block:
+                logger.warning(f"[{topic}] Deep-dive markers not found — using fallback slicing.")
+                question = response.split('\n', 1)[0].strip()
+                full_content = response.strip()
+            else:
+                question = question_block.strip()
+                full_content = f"*Question:*\n{question}\n\n*Answer:*\n{answer_block.strip()}"
+            
+            # Apply styling to fallback as well
+            full_content = to_whatsapp_style(full_content)
         
         self.history.add_to_history(f"deep_dive:{topic}", question[:200])
-        return question.strip(), full_content
+        return question.strip(), full_content.strip()

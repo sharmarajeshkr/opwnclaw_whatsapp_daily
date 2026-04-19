@@ -8,8 +8,6 @@ from app.llm.provider import LLMProvider
 from app.core.logging import get_logger
 
 from app.agents.utils import parse_eval_response
-from app.core.logging import get_logger
-
 logger = get_logger("ScoringAgent")
 
 class ScoringAgent:

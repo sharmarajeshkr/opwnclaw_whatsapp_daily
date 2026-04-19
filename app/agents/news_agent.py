@@ -5,7 +5,7 @@ Specialized agent for fetching and rewriting technical news and curated updates.
 """
 from app.llm.provider import LLMProvider
 from app.database.history import UserHistoryManager
-from app.agents.utils import extract_block
+from app.agents.utils import to_whatsapp_style
 from app.core.logging import get_logger
 
 logger = get_logger("NewsAgent")
@@ -26,5 +26,6 @@ class NewsAgent:
         )
         
         content = await self.llm.generate_response(prompt)
-        self.history.add_to_history(f"news:{source}", content[:50])
-        return content
+        styled_content = to_whatsapp_style(content)
+        self.history.add_to_history(f"news:{source}", styled_content[:50])
+        return styled_content
