@@ -25,6 +25,10 @@ class SystemConfig(BaseSettings):
     POSTGRES_PORT: str = Field(default="5432")
     POSTGRES_DB: str = Field(default="openclaw")
 
+    # Redis Settings
+    REDIS_HOST: str = Field(default="localhost")
+    REDIS_PORT: int = Field(default=6379)
+
     model_config = SettingsConfigDict(
         env_file=".env", 
         env_file_encoding="utf-8", 

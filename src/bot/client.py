@@ -7,8 +7,12 @@ import segno
 from src.core.db import get_conn
 from src.core.logger import get_logger
 from src.core.logging_utils import ContextAdapter
+from src.core.limiter import TokenBucketLimiter
 
 logger = get_logger("WhatsAppClient")
+
+# WhatsApp Outgoing Limiter: 1 msg/sec with burst of 3
+sender_limiter = TokenBucketLimiter(rate=1.0, capacity=3)
 
 class WhatsAppClient:
     def __init__(self, phone_number: str):
@@ -124,6 +128,7 @@ class WhatsAppClient:
 
     async def send_message(self, text: str, retries: int = 3):
         await self.ensure_connected()
+        await sender_limiter.consume(wait=True)
         jid = build_jid(self.phone_number)
         
         for attempt in range(retries):
@@ -140,6 +145,7 @@ class WhatsAppClient:
 
     async def send_image(self, image_path: str, caption: str = None, retries: int = 3):
         await self.ensure_connected()
+        await sender_limiter.consume(wait=True)
         jid = build_jid(self.phone_number)
 
         if not os.path.exists(image_path):

@@ -2,8 +2,13 @@ import os
 from src.core.sys_config import settings
 from src.core.logger import get_logger
 from src.core.logging_utils import log_duration
+from src.core.limiter import TokenBucketLimiter
+from src.core.cache import LLMCache
 
 logger = get_logger("LLMProvider")
+
+# Global LLM Limiter: 20 RPM (0.33 tokens/sec) with burst capacity of 5
+llm_limiter = TokenBucketLimiter(rate=0.33, capacity=5)
 
 class LLMProvider:
     def __init__(self):
@@ -26,6 +31,14 @@ class LLMProvider:
     @log_duration(logger)
     async def generate_response(self, prompt: str) -> str:
         import asyncio
+        
+        # 1. Check Cache
+        cached = await LLMCache.get(prompt, self.provider, self.model_name)
+        if cached:
+            return cached
+
+        # 2. Rate Limit
+        await llm_limiter.consume(wait=True)
         logger.debug(f"Generating response with {self.provider}...")
         try:
             if self.provider == "gemini":
@@ -35,7 +48,7 @@ class LLMProvider:
                     model=self.model_name,
                     contents=prompt
                 )
-                return response.text
+                text = response.text
             elif self.provider == "openai":
                 # OpenAI generation is synchronous here (using OpenAI instead of AsyncOpenAI)
                 response = await asyncio.to_thread(
@@ -43,7 +56,13 @@ class LLMProvider:
                     model=self.model_name,
                     messages=[{"role": "user", "content": prompt}]
                 )
-                return response.choices[0].message.content
+                text = response.choices[0].message.content
+            
+            # 3. Store in Cache
+            if text:
+                await LLMCache.set(prompt, self.provider, self.model_name, text)
+            return text
+
         except Exception as e:
             logger.error(f"Error generating response from {self.provider}: {e}")
             raise
@@ -51,6 +70,7 @@ class LLMProvider:
 
     @log_duration(logger)
     async def generate_image(self, prompt: str) -> str:
+        await llm_limiter.consume(wait=True)
         """
         Generates an image via OpenAI DALL-E and returns the local file path.
         Currently implemented as a safe stub to avoid unintentional costs.

@@ -10,9 +10,13 @@ from src.core.session import SessionManager
 from src.core.performance import PerformanceTracker
 from src.core.logger import get_logger
 from src.core.logging_utils import ContextAdapter, log_duration
+from src.core.limiter import MultiUserLimiter
 from src.mcp.client import run_medium_query
 
 logger = get_logger("InterviewScheduler")
+
+# Per-User Limiter: 5 RPM (0.083 tokens/sec) with burst capacity of 2
+user_antispam = MultiUserLimiter(rate=0.083, capacity=2)
 
 
 class InterviewScheduler:
@@ -218,6 +222,12 @@ class InterviewScheduler:
 
             if not text:
                 return  # Ignore media, stickers, reactions
+
+            # ── Per-User Rate Limit Check ──────────────────────────────
+            if not await user_antispam.consume(phone, wait=False):
+                self.logger.warning(f"⚠️ [{phone}] Rate limit exceeded. Ignoring reply.")
+                # We don't send a message back to avoid a feedback loop with spammers
+                return
 
             self.logger.info(f"📩 [{phone}] Incoming reply: {text}")
 
