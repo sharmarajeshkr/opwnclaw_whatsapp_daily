@@ -4,11 +4,14 @@ import re
 from src.content.llm import LLMProvider
 from src.content.history import UserHistoryManager
 from src.core.logger import get_logger
+from src.core.logging_utils import ContextAdapter, log_duration
 
 logger = get_logger("InterviewAgent")
 
 class InterviewAgent:
     def __init__(self, phone_number: str, topic: str = "Software Engineering"):
+        self.phone_number = phone_number
+        self.logger = ContextAdapter(logger, {"phone": phone_number})
         self.llm = LLMProvider()
         self.history_manager = UserHistoryManager(phone_number)
         self.topic = topic
@@ -17,7 +20,7 @@ class InterviewAgent:
         """Returns (detailed_text, image_prompt) for the daily challenge, tailored by level and week."""
         if skill_profile is None:
             skill_profile = {"backend": 5, "system_design": 5, "ai": 5}
-        logger.info(f"Generating daily challenge for level='{level}', week={week}, skills={skill_profile}")
+        self.logger.info(f"Generating daily challenge for level='{level}', week={week}, skills={skill_profile}")
         history = self.history_manager.get_history("challenges")
         history_str = "\n".join([f"- {h}" for h in history])
         
@@ -69,7 +72,7 @@ class InterviewAgent:
         scored later. The full message (question + detailed answer) is what
         gets sent to WhatsApp.
         """
-        logger.info(f"Generating deep dive for subject='{subject}', level='{level}', week={week}")
+        self.logger.info(f"Generating deep dive for subject='{subject}', level='{level}', week={week}")
         history = self.history_manager.get_history(subject)
         history_str = "\n".join([f"- {h}" for h in history])
 
@@ -108,7 +111,7 @@ class InterviewAgent:
 
         # Fallback: if markers not found, treat entire response as both
         if not question or not answer:
-            logger.warning(f"[{subject}] Deep-dive markers not found — using full response.")
+            self.logger.warning(f"[{subject}] Deep-dive markers not found — using full response.")
             question = response.split('\n', 1)[0].strip()
             answer = response.strip()
 
@@ -202,7 +205,7 @@ class InterviewAgent:
                     "follow_up_question": data.get("follow_up_question"),
                 }
         except Exception as exc:
-            logger.warning(f"Could not parse eval JSON for topic '{topic}': {exc}")
+            self.logger.warning(f"Could not parse eval JSON for topic '{topic}': {exc}")
         # Safe fallback — never crash the handler
         return {"score": 5, "feedback": "Answer received! Keep practising 💪", "weak_aspects": []}
 

@@ -9,6 +9,7 @@ from src.core.config import ConfigManager
 from src.core.session import SessionManager
 from src.core.performance import PerformanceTracker
 from src.core.logger import get_logger
+from src.core.logging_utils import ContextAdapter, log_duration
 from src.mcp.client import run_medium_query
 
 logger = get_logger("InterviewScheduler")
@@ -19,6 +20,7 @@ class InterviewScheduler:
         self.agent = agent
         self.whatsapp = whatsapp
         self.phone_number = phone_number
+        self.logger = ContextAdapter(logger, {"phone": phone_number})
         self.sender = ChannelSender(whatsapp, phone_number)
         self.scheduler = AsyncIOScheduler()
         self.config = ConfigManager.load_config(phone_number)
@@ -56,7 +58,7 @@ class InterviewScheduler:
         
         if target_level_idx > current_level_idx:
             new_level = order[target_level_idx]
-            logger.info(f"🚀 [{self.phone_number}] Auto-promoting from {self.level} to {new_level} (Week {week_num})")
+            self.logger.info(f"🚀 [{self.phone_number}] Auto-promoting from {self.level} to {new_level} (Week {week_num})")
             
             # Update DB
             self.config.level = new_level
@@ -74,7 +76,7 @@ class InterviewScheduler:
         return self.level, week_num
 
     async def daily_task(self):
-        logger.info(f"🚀 [{self.phone_number}] Starting content delivery cycle")
+        self.logger.info(f"🚀 [{self.phone_number}] Starting content delivery cycle")
 
         # Clear any stale unanswered session from yesterday so scoring
         # doesn't accidentally apply to the wrong question.
@@ -86,7 +88,7 @@ class InterviewScheduler:
 
         # 1. Architecture Challenge
         level, week = self._get_progression_context()
-        logger.info(f"[{self.phone_number}] Progression: level={level}, week={week}")
+        self.logger.info(f"[{self.phone_number}] Progression: level={level}, week={week}")
 
         if topics.topic_1:
             detailed_text, image_prompt = await self.agent.get_daily_challenge(
@@ -116,7 +118,7 @@ class InterviewScheduler:
             selected_topics = config_deep_topics  # safety fallback
 
         if weak_topics:
-            logger.info(
+            self.logger.info(
                 f"[{self.phone_number}] Weak topics prioritised: {weak_topics} "
                 f"→ selected: {selected_topics}"
             )
@@ -158,14 +160,14 @@ class InterviewScheduler:
                 content = await self.agent.get_curated_content("Medium_updates", prompt)
                 await self.sender.send_to_all(content, title=f"Latest from Medium: {topics.topic_5}")
             except Exception as e:
-                logger.error(f"MCP Integration Error for {topics.topic_5}: {e}")
+                self.logger.error(f"MCP Integration Error for {topics.topic_5}: {e}")
                 # Fallback to pure LLM if MCP server crashes
                 content = await self.agent.get_curated_content(
                     "Global_news", f"Top global news about {topics.topic_5} for today."
                 )
                 await self.sender.send_to_all(content, title=f"Fresh Updates: {topics.topic_5}")
 
-        logger.info(f"✅ [{self.phone_number}] Content delivery cycle completed.")
+        self.logger.info(f"✅ [{self.phone_number}] Content delivery cycle completed.")
 
     # ------------------------------------------------------------------
     # Phase 4 — Incoming Message Handler (Reply → Score → Feedback)
@@ -217,12 +219,12 @@ class InterviewScheduler:
             if not text:
                 return  # Ignore media, stickers, reactions
 
-            logger.info(f"📩 [{phone}] Incoming reply: {text}")
+            self.logger.info(f"📩 [{phone}] Incoming reply: {text}")
 
             # ── Look up active session ─────────────────────────────────
             session = SessionManager.get_active_session(phone)
             if not session:
-                logger.debug(f"[{phone}] No active session — ignoring reply.")
+                self.logger.debug(f"[{phone}] No active session — ignoring reply.")
                 
                 # Send a gentle fallback message so the user knows the bot is alive
                 fallback_msg = (
@@ -234,7 +236,7 @@ class InterviewScheduler:
                 return
 
             # ── Evaluate with LLM ──────────────────────────────────────
-            logger.info(f"[{phone}] Evaluating answer for topic='{session['topic']}'...")
+            self.logger.info(f"[{phone}] Evaluating answer for topic='{session['topic']}'...")
             level, week = self._get_progression_context()
             
             # Allow follow-up if we haven't done one yet for this session
@@ -251,7 +253,7 @@ class InterviewScheduler:
             # ── Check for Follow-Up Question ───────────────────────────
             follow_up = result.get("follow_up_question")
             if allow_follow_up and follow_up and follow_up.strip().lower() != "null":
-                logger.info(f"[{phone}] Sending follow-up for topic='{session['topic']}'")
+                self.logger.info(f"[{phone}] Sending follow-up for topic='{session['topic']}'")
                 
                 # Update session instead of clearing it
                 SessionManager.update_session_with_follow_up(session["id"], follow_up.strip())
@@ -300,10 +302,10 @@ class InterviewScheduler:
                 feedback_msg += f"\n\n📌 *Review these concepts:* {aspects}"
 
             await self.whatsapp.send_message(feedback_msg)
-            logger.info(f"✅ [{phone}] Feedback sent — score {score}/10, streak {new_streak}")
+            self.logger.info(f"✅ [{phone}] Feedback sent — score {score}/10, streak {new_streak}")
 
         except Exception as exc:
-            logger.error(f"handle_incoming error: {exc}", exc_info=True)
+            self.logger.error(f"handle_incoming error: {exc}", exc_info=True)
 
     # ------------------------------------------------------------------
     # Phase 6 — Weekly Report (Every Sunday 09:00)
@@ -314,7 +316,7 @@ class InterviewScheduler:
         Calculates and sends a comprehensive weekly performance summary.
         Includes Score (0-100), Strengths, and Weaknesses.
         """
-        logger.info(f"📊 [{self.phone_number}] Generating enhanced weekly report...")
+        self.logger.info(f"📊 [{self.phone_number}] Generating enhanced weekly report...")
         summary = PerformanceTracker.get_weekly_summary(self.phone_number)
 
         if not summary:
@@ -362,7 +364,7 @@ class InterviewScheduler:
         lines.append(f"📝 *Total answered this week:* {total_attempts} questions")
 
         await self.whatsapp.send_message("\n".join(lines))
-        logger.info(f"✅ [{self.phone_number}] Enhanced weekly report sent.")
+        self.logger.info(f"✅ [{self.phone_number}] Enhanced weekly report sent.")
 
     # ------------------------------------------------------------------
     # Per-Topic Delivery Tasks
@@ -378,7 +380,7 @@ class InterviewScheduler:
             if not topic_name:
                 return
 
-            logger.info(f"[{self.phone_number}] Delivering topic {slot}: {topic_name}")
+            self.logger.info(f"[{self.phone_number}] Delivering topic {slot}: {topic_name}")
             SessionManager.clear_all_stale(self.phone_number)
             level, week = self._get_progression_context()
 
@@ -418,13 +420,13 @@ class InterviewScheduler:
                     content = await self.agent.get_curated_content("Medium_updates", prompt)
                     await self.sender.send_to_all(content, title=f"Latest from Medium: {topic_name}")
                 except Exception as e:
-                    logger.error(f"MCP Error for {topic_name}: {e}")
+                    self.logger.error(f"MCP Error for {topic_name}: {e}")
                     content = await self.agent.get_curated_content(
                         "Global_news", f"Top global news about {topic_name} for today."
                     )
                     await self.sender.send_to_all(content, title=f"Fresh Updates: {topic_name}")
 
-            logger.info(f"✅ [{self.phone_number}] Topic {slot} delivery done.")
+            self.logger.info(f"✅ [{self.phone_number}] Topic {slot} delivery done.")
 
         _task.__name__ = f"topic_{slot}_task"
         return _task
@@ -461,7 +463,7 @@ class InterviewScheduler:
                 replace_existing=True,
             )
             self._topic_jobs.append(job)
-            logger.info(
+            self.logger.info(
                 f"[{self.phone_number}] Scheduled topic {slot} '{topic_name}' at {hour:02d}:{minute:02d} ({timezone_str})"
             )
 
@@ -479,15 +481,15 @@ class InterviewScheduler:
                 chat = getattr(chat_jid, "User", "Unknown") if chat_jid else "Unknown"
                 is_from_me = getattr(m.Info.MessageSource, "IsFromMe", False)
                 text = (getattr(m.Message, "conversation", "") or getattr(getattr(m.Message, "extendedTextMessage", None), "text", "") or "")
-                logger.info(f"RAW MESSAGE EVENT: chat={chat}, sender={sender}, is_from_me={is_from_me}, text='{text[:30]}'")
+                self.logger.info(f"RAW MESSAGE EVENT: chat={chat}, sender={sender}, is_from_me={is_from_me}, text='{text[:30]}'")
             except Exception as e:
-                logger.error(f"Error logging raw message: {e}")
+                self.logger.error(f"Error logging raw message: {e}")
             await self.handle_incoming(c, m)
 
         self.whatsapp.register_incoming_handler(
             handler=lambda c, m: asyncio.create_task(raw_message_logger(c, m))
         )
-        logger.info(f"[{self.phone_number}] Incoming message handler registered.")
+        self.logger.info(f"[{self.phone_number}] Incoming message handler registered.")
 
         await self.whatsapp.connect()
 
@@ -508,7 +510,7 @@ class InterviewScheduler:
         )
 
         self.scheduler.start()
-        logger.info(f"✅ [{self.phone_number}] Scheduler started with per-topic times.")
+        self.logger.info(f"✅ [{self.phone_number}] Scheduler started with per-topic times.")
 
         asyncio.create_task(self._watch_config())
 
@@ -523,7 +525,7 @@ class InterviewScheduler:
                 new_snapshot = new_cfg.model_dump()
 
                 if new_snapshot != last_snapshot:
-                    logger.info(f"🔄 [{self.phone_number}] Config change detected — hot-reloading per-topic jobs...")
+                    self.logger.info(f"🔄 [{self.phone_number}] Config change detected — hot-reloading per-topic jobs...")
                     new_tz = getattr(new_cfg, "timezone", "UTC")
                     self.config = new_cfg
                     self.level = new_cfg.level
@@ -547,7 +549,7 @@ class InterviewScheduler:
                         minute=0,
                         timezone=new_tz,
                     )
-                    logger.info(f"✅ [{self.phone_number}] Per-topic jobs hot-reloaded.")
+                    self.logger.info(f"✅ [{self.phone_number}] Per-topic jobs hot-reloaded.")
             except Exception as e:
-                logger.error(f"Config watch error: {e}")
+                self.logger.error(f"Config watch error: {e}")
 

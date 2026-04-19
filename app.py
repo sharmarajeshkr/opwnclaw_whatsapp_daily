@@ -502,6 +502,24 @@ if tab_config is not None:
             
             config = ConfigManager.load_config(selected_user)
 
+            st.markdown("---")
+            st.subheader("📚 Topic Schedule")
+
+            # Detect if any topic currently has an individual time set → default to Per-Topic
+            has_per_topic = any(
+                getattr(config.topics, f"topic_{n}_time", "").strip()
+                for n in range(1, 6)
+            )
+            schedule_mode = st.radio(
+                "Schedule Mode",
+                options=["🌐 Global — one time for all topics", "🕐 Per-Topic — different time per topic"],
+                index=1 if has_per_topic else 0,
+                horizontal=True,
+                help="Global: all topics fire at the same time. Per-Topic: each topic has its own delivery time.",
+                key=f"schedule_mode_{selected_user}"
+            )
+            is_per_topic = "Per-Topic" in schedule_mode
+
             with st.form("user_config_form"):
                 col_s1, col_s1a, col_s2, col_s3 = st.columns([1, 1, 1, 1])
                 with col_s1:
@@ -552,27 +570,6 @@ if tab_config is not None:
                 with c_prof3:
                     prof_ai = st.slider("AI", 0, 10, config.skill_profile.get("ai", 5), key="prof_ai")
                 
-                st.markdown("---")
-                st.subheader("📚 Topic Schedule")
-
-                # Detect if any topic currently has an individual time set → default to Per-Topic
-                has_per_topic = any(
-                    getattr(config.topics, f"topic_{n}_time", "").strip()
-                    for n in range(1, 6)
-                )
-                schedule_mode = st.radio(
-                    "Schedule Mode",
-                    options=["🌐 Global — one time for all topics", "🕐 Per-Topic — different time per topic"],
-                    index=1 if has_per_topic else 0,
-                    horizontal=True,
-                    help="Global: all topics fire at the same time. Per-Topic: each topic has its own delivery time.",
-                )
-                is_per_topic = "different time per topic" in schedule_mode
-
-                if is_per_topic:
-                    st.caption("Set a custom delivery time per topic. Leave blank to fall back to the Default Time above.")
-                else:
-                    st.caption("All topics will be delivered as one batch at the Default Delivery Time above.")
 
                 # Table header — hide time column in Global mode
                 if is_per_topic:

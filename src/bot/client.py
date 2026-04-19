@@ -6,12 +6,14 @@ from neonize.events import ConnectedEv, MessageEv, DisconnectedEv, LoggedOutEv
 import segno
 from src.core.db import get_conn
 from src.core.logger import get_logger
+from src.core.logging_utils import ContextAdapter
 
 logger = get_logger("WhatsAppClient")
 
 class WhatsAppClient:
     def __init__(self, phone_number: str):
         self.phone_number = phone_number.strip().lstrip("+")
+        self.logger = ContextAdapter(logger, {"phone": self.phone_number})
         
         # Ensure users directory exists
         users_dir = os.path.join("data", "users")
@@ -34,7 +36,7 @@ class WhatsAppClient:
             # Render the QR data into a valid PNG file
             segno.make(data_qr).save(qr_file, scale=10)
             self.qr_generated = True
-            logger.info(f"✅ [{self.phone_number}] QR Code image rendered and saved to {qr_file}. Please scan in WhatsApp.")
+            self.logger.info(f"✅ [{self.phone_number}] QR Code image rendered and saved to {qr_file}. Please scan in WhatsApp.")
             
         if hasattr(self.client.event, 'qr'):
             self.client.event.qr(on_qr)
@@ -45,7 +47,7 @@ class WhatsAppClient:
         """Register handlers for connection lifecycle."""
         @self.client.event(ConnectedEv)
         async def on_connected(client: NewAClient, event: ConnectedEv):
-            logger.info(f"✨ [{self.phone_number}] Connected successfully!")
+            self.logger.info(f"✨ [{self.phone_number}] Connected successfully!")
             self.is_ready.set()
             self.connected = True
             
@@ -54,9 +56,9 @@ class WhatsAppClient:
             if os.path.exists(qr_file):
                 try:
                     os.remove(qr_file)
-                    logger.debug(f"Deleted QR file {qr_file} after successful pairing.")
+                    self.logger.debug(f"Deleted QR file {qr_file} after successful pairing.")
                 except Exception as e:
-                    logger.warning(f"Could not delete QR file {qr_file}: {e}")
+                    self.logger.warning(f"Could not delete QR file {qr_file}: {e}")
             
             # Update DB status
             with get_conn() as conn:
@@ -68,13 +70,13 @@ class WhatsAppClient:
 
         @self.client.event(DisconnectedEv)
         async def on_disconnected(client: NewAClient, event: DisconnectedEv):
-            logger.warning(f"⚠️ [{self.phone_number}] WhatsApp disconnected. Connection lost.")
+            self.logger.warning(f"⚠️ [{self.phone_number}] WhatsApp disconnected. Connection lost.")
             self.connected = False
             self.is_ready.clear()
 
         @self.client.event(LoggedOutEv)
         async def on_logged_out(client: NewAClient, event: LoggedOutEv):
-            logger.error(f"❌ [{self.phone_number}] WhatsApp logged out. QR pairing required again.")
+            self.logger.error(f"❌ [{self.phone_number}] WhatsApp logged out. QR pairing required again.")
             self.connected = False
             self.is_ready.clear()
             
@@ -92,7 +94,7 @@ class WhatsAppClient:
             return
             
         for attempt in range(retries):
-            logger.info(f"[{self.phone_number}] Initiating WhatsApp connection (Attempt {attempt+1}/{retries})...")
+            self.logger.info(f"[{self.phone_number}] Initiating WhatsApp connection (Attempt {attempt+1}/{retries})...")
             self.is_ready.clear()
             self.connected = False
             
@@ -101,12 +103,12 @@ class WhatsAppClient:
             
             # Wait for the ConnectedEv or timeout
             try:
-                logger.debug(f"[{self.phone_number}] Waiting for connection signal...")
+                self.logger.debug(f"[{self.phone_number}] Waiting for connection signal...")
                 await asyncio.wait_for(self.is_ready.wait(), timeout=timeout)
-                logger.info(f"✅ [{self.phone_number}] WhatsApp connection ready.")
+                self.logger.info(f"✅ [{self.phone_number}] WhatsApp connection ready.")
                 return
             except asyncio.TimeoutError:
-                logger.error(f"❌ [{self.phone_number}] Timeout waiting for WhatsApp connection.")
+                self.logger.error(f"❌ [{self.phone_number}] Timeout waiting for WhatsApp connection.")
                 connect_task.cancel()
                 await asyncio.sleep(5)
                 
@@ -127,10 +129,10 @@ class WhatsAppClient:
         for attempt in range(retries):
             try:
                 await self.client.send_message(jid, text)
-                logger.debug(f"✅ [{self.phone_number}] Message sent to {jid} (Attempt {attempt+1})")
+                self.logger.debug(f"✅ [{self.phone_number}] Message sent to {jid} (Attempt {attempt+1})")
                 return
             except Exception as e:
-                logger.error(f"Error sending message (Attempt {attempt+1}): {e}")
+                self.logger.error(f"Error sending message (Attempt {attempt+1}): {e}")
                 if attempt < retries - 1:
                     await asyncio.sleep(5 * (attempt + 1))  # Exponential backoff
                 else:
@@ -141,7 +143,7 @@ class WhatsAppClient:
         jid = build_jid(self.phone_number)
 
         if not os.path.exists(image_path):
-            logger.error(f"Image not found at {image_path}")
+            self.logger.error(f"Image not found at {image_path}")
             return
 
         with open(image_path, "rb") as f:
@@ -150,10 +152,10 @@ class WhatsAppClient:
         for attempt in range(retries):
             try:
                 await self.client.send_image(jid, image_bytes, caption=caption)
-                logger.debug(f"✅ [{self.phone_number}] Image sent successfully (Attempt {attempt+1})")
+                self.logger.debug(f"✅ [{self.phone_number}] Image sent successfully (Attempt {attempt+1})")
                 return
             except Exception as e:
-                logger.error(f"Error sending image (Attempt {attempt+1}): {e}")
+                self.logger.error(f"Error sending image (Attempt {attempt+1}): {e}")
                 if attempt < retries - 1:
                     await asyncio.sleep(5 * (attempt + 1))
                 else:
@@ -168,4 +170,4 @@ class WhatsAppClient:
         else:
              @self.client.event(MessageEv)
              async def on_message(client: NewAClient, message: MessageEv):
-                 logger.info(f"📩 [{self.phone_number}] Incoming message: {message}")
+                 self.logger.info(f"📩 [{self.phone_number}] Incoming message: {message}")

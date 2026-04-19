@@ -1,6 +1,7 @@
 import os
 from src.core.sys_config import settings
 from src.core.logger import get_logger
+from src.core.logging_utils import log_duration
 
 logger = get_logger("LLMProvider")
 
@@ -22,6 +23,7 @@ class LLMProvider:
         else:
             raise ValueError("No API key found for Gemini or OpenAI in environment.")
 
+    @log_duration(logger)
     async def generate_response(self, prompt: str) -> str:
         import asyncio
         logger.debug(f"Generating response with {self.provider}...")
@@ -47,6 +49,7 @@ class LLMProvider:
             raise
         return ""
 
+    @log_duration(logger)
     async def generate_image(self, prompt: str) -> str:
         """
         Generates an image via OpenAI DALL-E and returns the local file path.

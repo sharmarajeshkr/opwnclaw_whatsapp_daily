@@ -22,6 +22,7 @@ import psycopg2
 import psycopg2.extras
 
 from src.core.logger import get_logger
+from src.core.logging_utils import log_duration
 from src.core.sys_config import settings
 
 logger = get_logger("CoachDB")
@@ -156,6 +157,7 @@ def init_db() -> None:
 
 
 @contextmanager
+@log_duration(logger)
 def get_conn():
     """
     Thread-safe PostgreSQL connection context manager.
