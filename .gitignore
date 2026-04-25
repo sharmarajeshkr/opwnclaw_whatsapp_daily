@@ -17,6 +17,7 @@ data/qr_*.png
 
 # Logs
 data/bot.log
+logs/
 
 # Python cache
 __pycache__/

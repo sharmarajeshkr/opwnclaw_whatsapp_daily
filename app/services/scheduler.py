@@ -5,7 +5,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from app.agents.interview_agent import InterviewAgent
 from app.agents.scoring_agent import ScoringAgent
 from app.agents.deep_dive_agent import DeepDiveAgent
-from app.agents.news_agent import NewsAgent
+from app.agents.curator_agent import CuratorAgent
 from app.channels.whatsapp.client import WhatsAppClient
 from app.channels.whatsapp.handler import ChannelSender
 from app.core.config import ConfigManager
@@ -31,7 +31,7 @@ class InterviewScheduler:
         self.interview_agent = InterviewAgent(phone_number)
         self.scoring_agent = ScoringAgent(phone_number)
         self.deep_dive_agent = DeepDiveAgent(phone_number)
-        self.news_agent = NewsAgent(phone_number)
+        self.curator_agent = CuratorAgent(phone_number)
         self.logger = ContextAdapter(logger, {"phone": phone_number})
         self.sender = ChannelSender(whatsapp, phone_number)
         self.scheduler = AsyncIOScheduler()
@@ -146,9 +146,9 @@ class InterviewScheduler:
             await self.sender.send_to_all(full_content, title=f"Deep Dive: {topic}")
             await asyncio.sleep(5)
 
-        # 4. Fresh Updates 1
+        # 4. Fresh Updates 1 (Deep Dive on topic_4)
         if topics.topic_4:
-            content = await self.news_agent.get_curated_content(
+            content = await self.curator_agent.get_curated_content(
                 "Tech_news", f"Top global news about {topics.topic_4} for today."
             )
             await self.sender.send_to_all(content, title=f"Fresh Updates: {topics.topic_4}")
@@ -157,27 +157,43 @@ class InterviewScheduler:
         # 5. Fresh Updates 2 (MCP Integration via Medium)
         if topics.topic_5:
             try:
-                # Convert topic string to Medium URL tag format (e.g. 'Artificial Intelligence' -> 'artificial-intelligence')
-                tag = topics.topic_5.lower().replace(' ', '-')
-                mcp_data = await run_medium_query(tag, is_user=False, limit=3)
+                # AI-Powered Tag Predictor: Handles ANY topic name dynamically
+                tag = await self.curator_agent.get_best_medium_tag(topics.topic_5)
                 
-                # Have the LLM rewrite the raw MCP output into an engaging WhatsApp digest
+                self.logger.info(f"🔍 [daily_task Slot 5] AI predicted tag: '{tag}' for topic: '{topics.topic_5}'")
+                mcp_data = await run_medium_query(tag, is_user=False, limit=3)
+                self.logger.info(f"✅ [daily_task Slot 5] MCP returned {len(mcp_data)} bytes")
+                
+                if "No posts found" in mcp_data:
+                    raise Exception(f"No Medium posts for tag '{tag}'")
+
+                
                 prompt = (
                     f"I just pulled the live Medium.com RSS feed for '{topics.topic_5}'. "
                     f"Here is the raw data from my MCP tools:\n\n{mcp_data}\n\n"
                     "Please rewrite this into a friendly, structured WhatsApp reading list. "
-                    "Include the exact links so the user can read them. Do not hallucinate any posts."
+                    "CRITICAL: You MUST include the EXACT 'freedium-mirror.cfd' links provided in the raw data so the user can bypass the paywall. "
+                    "Do not alter the URLs or hallucinate any posts."
                 )
                 
-                content = await self.news_agent.get_curated_content("Medium_updates", prompt)
+                content = await self.curator_agent.get_curated_content("Medium_updates", prompt)
                 await self.sender.send_to_all(content, title=f"Latest from Medium: {topics.topic_5}")
             except Exception as e:
-                self.logger.error(f"MCP Integration Error for {topics.topic_5}: {e}")
-                # Fallback to pure LLM if MCP server crashes
-                content = await self.news_agent.get_curated_content(
-                    "Global_news", f"Top global news about {topics.topic_5} for today."
-                )
-                await self.sender.send_to_all(content, title=f"Fresh Updates: {topics.topic_5}")
+                self.logger.error(f"❌ MCP Integration Error for {topics.topic_5}: {e}. Retrying with generic 'technology' tag...")
+                try:
+                    mcp_data = await run_medium_query("technology", is_user=False, limit=3)
+                    prompt = (
+                        f"I tried to find Medium.com articles for '{topics.topic_5}' but failed. "
+                        f"Instead, I found these top technology articles:\n\n{mcp_data}\n\n"
+                        "Please rewrite this into a friendly WhatsApp reading list. "
+                        "CRITICAL: Use ONLY the exact links provided. ALL links must be from Medium (via freedium-mirror.cfd)."
+                    )
+                    content = await self.curator_agent.get_curated_content("Medium_updates", prompt)
+                    await self.sender.send_to_all(content, title=f"Tech Insights: {topics.topic_5}")
+                except Exception as e2:
+                    self.logger.error(f"❌ Double failure for Medium: {e2}")
+                    # No fallback to Global News to avoid hallucinations.
+
 
         self.logger.info(f"✅ [{self.phone_number}] Content delivery cycle completed.")
 
@@ -412,7 +428,7 @@ class InterviewScheduler:
                     "Visual Diagram for the Challenge",
                     title=topic_name
                 )
-            elif slot in (2, 3):
+            elif slot in (2, 3, 4):
                 weak_topics = PerformanceTracker.get_weak_topics(self.phone_number)
                 topic = weak_topics[0] if weak_topics else topic_name
                 question, full_content = await self.deep_dive_agent.get_deep_dive_with_question(
@@ -420,29 +436,45 @@ class InterviewScheduler:
                 )
                 SessionManager.set_active_question(self.phone_number, question, topic)
                 await self.sender.send_to_all(full_content, title=f"Deep Dive: {topic}")
-            elif slot == 4:
-                content = await self.agent.get_curated_content(
-                    "Tech_news", f"Top global news about {topic_name} for today."
-                )
-                await self.sender.send_to_all(content, title=f"Fresh Updates: {topic_name}")
             elif slot == 5:
                 try:
-                    tag = topic_name.lower().replace(" ", "-")
+                    # AI-Powered Tag Predictor: Handles ANY topic name dynamically
+                    tag = await self.curator_agent.get_best_medium_tag(topic_name)
+                    
+                    self.logger.info(f"🔍 [Slot 5] AI predicted tag: '{tag}' for topic: '{topic_name}'")
+                    
                     mcp_data = await run_medium_query(tag, is_user=False, limit=3)
+                    self.logger.info(f"✅ [Slot 5] Received MCP Data length: {len(mcp_data)} bytes")
+                    
+                    if "No posts found" in mcp_data:
+                        self.logger.warning(f"⚠️ [Slot 5] No posts found on Medium for tag '{tag}'. Will try fallback news.")
+                        raise Exception(f"No Medium posts for tag '{tag}'")
+
+                        
                     prompt = (
                         f"I just pulled the live Medium.com RSS feed for '{topic_name}'. "
                         f"Here is the raw data from my MCP tools:\n\n{mcp_data}\n\n"
                         "Please rewrite this into a friendly, structured WhatsApp reading list. "
-                        "Include the exact links so the user can read them. Do not hallucinate any posts."
+                        "CRITICAL: You MUST include the EXACT 'freedium-mirror.cfd' links provided in the raw data so the user can bypass the paywall. "
+                        "Do not alter the URLs or hallucinate any posts."
                     )
-                    content = await self.news_agent.get_curated_content("Medium_updates", prompt)
+                    content = await self.curator_agent.get_curated_content("Medium_updates", prompt)
                     await self.sender.send_to_all(content, title=f"Latest from Medium: {topic_name}")
                 except Exception as e:
-                    self.logger.error(f"MCP Error for {topic_name}: {e}")
-                    content = await self.news_agent.get_curated_content(
-                        "Global_news", f"Top global news about {topic_name} for today."
-                    )
-                    await self.sender.send_to_all(content, title=f"Fresh Updates: {topic_name}")
+                    self.logger.error(f"❌ MCP/Medium Error for {topic_name}: {e}. Retrying with generic 'technology' tag...")
+                    try:
+                        mcp_data = await run_medium_query("technology", is_user=False, limit=3)
+                        prompt = (
+                            f"I tried to find Medium.com articles for '{topic_name}' but failed. "
+                            f"Instead, I found these top technology articles:\n\n{mcp_data}\n\n"
+                            "Please rewrite this into a friendly WhatsApp reading list. "
+                            "CRITICAL: Use ONLY the exact links provided. ALL links must be from Medium (via freedium-mirror.cfd)."
+                        )
+                        content = await self.curator_agent.get_curated_content("Medium_updates", prompt)
+                        await self.sender.send_to_all(content, title=f"Tech Insights: {topic_name}")
+                    except Exception as e2:
+                        self.logger.error(f"❌ Double failure for Medium: {e2}")
+
 
             self.logger.info(f"✅ [{self.phone_number}] Topic {slot} delivery done.")
 

@@ -8,6 +8,11 @@ Exposes a tool to fetch the latest Medium.com posts.
 import feedparser
 from mcp.server.fastmcp import FastMCP
 
+from app.core.logging import get_logger
+import sys
+
+logger = get_logger("MediumMCP_Server")
+
 # 1. Initialize the FastMCP Server
 mcp = FastMCP("MediumRSS_Server")
 
@@ -27,22 +32,33 @@ def get_medium_posts(query: str, is_user: bool = False, limit: int = 5) -> str:
     else:
         feed_url = f"https://medium.com/feed/tag/{query}"
         
+    logger.info(f"📡 Fetching Medium RSS: {feed_url}")
     parsed_feed = feedparser.parse(feed_url)
     
     if not parsed_feed.entries:
+        logger.warning(f"⚠️ No posts found for query: {query}")
         return f"No posts found for query: {query}"
         
+    logger.info(f"✅ Found {len(parsed_feed.entries)} entries.")
     results = [f"Found {len(parsed_feed.entries)} entries. Showing top {limit}:\n"]
     
     for idx, entry in enumerate(parsed_feed.entries[:limit]):
         title = entry.get('title', 'Unknown Title')
         original_link = entry.get('link', 'No Link')
+        summary = entry.get('summary', '') or entry.get('description', '')
         
-        # Prepend Freedium (Medium Unlock) proxy to bypass paywalls
-        link = f"https://freedium.cfd/{original_link}" if "medium.com" in original_link else original_link
+        # Strip HTML from summary if it's too messy
+        import re as _re
+        summary = _re.sub('<[^<]+?>', '', summary).strip()
+        if len(summary) > 200:
+            summary = summary[:197] + "..."
+            
+        # Prepend Freedium (Medium Unlock) proxy to bypass paywalls unconditionally
+        # as Medium RSS feeds can include custom domains (e.g. towardsdatascience.com)
+        link = f"https://freedium-mirror.cfd/{original_link}"
         
         published = entry.get('published', 'Unknown Date')
-        results.append(f"{idx + 1}. {title}\n   Published: {published}\n   Link: {link}\n")
+        results.append(f"{idx + 1}. {title}\n   Summary: {summary}\n   Published: {published}\n   Link: {link}\n")
         
     return "\n".join(results)
 

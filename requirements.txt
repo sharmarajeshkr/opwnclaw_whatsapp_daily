@@ -14,7 +14,8 @@ cryptography
 pytz
 psycopg2-binary
 redis>=5.0.0
-mcp
+mcp[fastmcp]
+feedparser
 
 # Dev Dependencies
 pytest

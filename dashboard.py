@@ -446,7 +446,13 @@ if tab_profiles is not None:
 
         st.subheader("➕ Register New User")
         with st.form("new_user_form", clear_on_submit=True):
-            col_ph, col_pin, col_btn = st.columns([3, 1, 1])
+            col_name, col_ph, col_pin, col_btn = st.columns([2, 3, 1, 1])
+            with col_name:
+                new_name = st.text_input(
+                    "Name",
+                    placeholder="User Name",
+                    label_visibility="collapsed",
+                )
             with col_ph:
                 new_phone = st.text_input(
                     "Mobile Number (with country code)",
@@ -478,6 +484,7 @@ if tab_profiles is not None:
                         status_row = conn.execute("SELECT is_active FROM user_status WHERE phone_number = %s", (raw,)).fetchone()
                     
                     pin_value = new_pin.strip() if new_pin.strip() else "0000"
+                    name_value = new_name.strip()
                     
                     if status_row and not status_row["is_active"]:
                         # Reactivate
@@ -485,13 +492,15 @@ if tab_profiles is not None:
                             conn.execute("UPDATE user_status SET is_active = TRUE WHERE phone_number = %s", (raw,))
                         cfg = ConfigManager.load_config(raw)
                         cfg.pin_code = pin_value
+                        if name_value:
+                            cfg.name = name_value
                         ConfigManager.save_config(raw, cfg)
                         st.success(f"✅ User +{raw} reactivated.")
                     else:
                         # New registration
                         from app.core.config import UserConfig, ChannelsConfig
                         default_channels = ChannelsConfig(whatsapp_target=raw)
-                        new_cfg = UserConfig(channels=default_channels, pin_code=pin_value)
+                        new_cfg = UserConfig(name=name_value, channels=default_channels, pin_code=pin_value)
                         ConfigManager.save_config(raw, new_cfg)
                         with get_conn() as conn:
                             conn.execute(
@@ -607,7 +616,9 @@ if tab_config is not None:
             is_per_topic = "Per-Topic" in schedule_mode
 
             with st.form("user_config_form"):
-                col_s1, col_s1a, col_s2, col_s3 = st.columns([1, 1, 1, 1])
+                col_s0, col_s1, col_s1a, col_s2, col_s3 = st.columns([1.5, 1, 1, 1, 1])
+                with col_s0:
+                    display_name = st.text_input("Display Name", value=config.name, placeholder="e.g. Rajesh Sharma")
                 with col_s1:
                     schedule = st.text_input(
                         "Default Delivery Time (HH:MM)",
@@ -732,6 +743,7 @@ if tab_config is not None:
 
                     if not time_error:
                         new_cfg = UserConfig(
+                            name=display_name,
                             schedule_time=global_t,
                             level=level_selection,
                             timezone=tz_selection,
