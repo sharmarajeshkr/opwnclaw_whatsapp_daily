@@ -4067,3 +4067,273 @@
 {"timestamp": "2026-04-25T14:52:57.975648", "level": "DEBUG", "name": "CoachDB", "message": "\u23f1\ufe0f get_conn took 0.0000s"}
 {"timestamp": "2026-04-25T14:52:58.032892", "level": "DEBUG", "name": "SessionManager", "message": "Session id=1 cleared."}
 {"timestamp": "2026-04-25T14:52:58.032892", "level": "INFO", "name": "InterviewScheduler", "message": "[919123456789] \u2705 [919123456789] Feedback sent \u2014 score 4/10, streak 1", "phone": "919123456789"}
+{"timestamp": "2026-04-25T15:01:20.609961", "level": "DEBUG", "name": "CoachDB", "message": "\u23f1\ufe0f get_conn took 0.0000s"}
+{"timestamp": "2026-04-25T15:01:20.688927", "level": "INFO", "name": "CoachDB", "message": "\u2705 CoachDB initialised (PostgreSQL)"}
+{"timestamp": "2026-04-25T15:01:20.696475", "level": "INFO", "name": "Main", "message": "============================================="}
+{"timestamp": "2026-04-25T15:01:20.699993", "level": "INFO", "name": "Main", "message": "      Interview Multi-User Bot Daemon         "}
+{"timestamp": "2026-04-25T15:01:20.699993", "level": "INFO", "name": "Main", "message": "============================================="}
+{"timestamp": "2026-04-25T15:01:20.699993", "level": "INFO", "name": "Main", "message": "Scanning for paired users..."}
+{"timestamp": "2026-04-25T15:01:20.699993", "level": "DEBUG", "name": "CoachDB", "message": "\u23f1\ufe0f get_conn took 0.0000s"}
+{"timestamp": "2026-04-25T15:01:20.925825", "level": "DEBUG", "name": "CoachDB", "message": "\u23f1\ufe0f get_conn took 0.0000s"}
+{"timestamp": "2026-04-25T15:01:21.094475", "level": "INFO", "name": "Main", "message": "\u2705 Found 1 paired users: ['917975806891']"}
+{"timestamp": "2026-04-25T15:01:21.104988", "level": "INFO", "name": "Main", "message": "\ud83d\ude80 1 user bots are now active."}
+{"timestamp": "2026-04-25T15:01:21.106498", "level": "INFO", "name": "Main", "message": "\ud83d\ude80 Initializing bot for user: 917975806891"}
+{"timestamp": "2026-04-25T15:01:23.545434", "level": "DEBUG", "name": "CoachDB", "message": "\u23f1\ufe0f get_conn took 0.0000s"}
+{"timestamp": "2026-04-25T15:01:23.627508", "level": "INFO", "name": "CoachDB", "message": "\u2705 CoachDB initialised (PostgreSQL)"}
+{"timestamp": "2026-04-25T15:01:25.265704", "level": "DEBUG", "name": "CoachDB", "message": "\u23f1\ufe0f get_conn took 0.0000s"}
+{"timestamp": "2026-04-25T15:01:25.336913", "level": "DEBUG", "name": "CoachDB", "message": "\u23f1\ufe0f get_conn took 0.0000s"}
+{"timestamp": "2026-04-25T15:01:25.388687", "level": "INFO", "name": "InterviewScheduler", "message": "[917975806891] [917975806891] Incoming message handler registered.", "phone": "917975806891"}
+{"timestamp": "2026-04-25T15:01:25.388687", "level": "INFO", "name": "WhatsAppClient", "message": "[917975806891] [917975806891] Initiating WhatsApp connection (Attempt 1/3)...", "phone": "917975806891"}
+{"timestamp": "2026-04-25T15:01:25.392700", "level": "DEBUG", "name": "WhatsAppClient", "message": "[917975806891] [917975806891] Waiting for connection signal...", "phone": "917975806891"}
+{"timestamp": "2026-04-25T15:01:26.707105", "level": "INFO", "name": "WhatsAppClient", "message": "[917975806891] \u2728 [917975806891] Connected successfully!", "phone": "917975806891"}
+{"timestamp": "2026-04-25T15:01:26.708771", "level": "DEBUG", "name": "CoachDB", "message": "\u23f1\ufe0f get_conn took 0.0000s"}
+{"timestamp": "2026-04-25T15:01:26.758917", "level": "INFO", "name": "WhatsAppClient", "message": "[917975806891] \u2705 [917975806891] WhatsApp connection ready.", "phone": "917975806891"}
+{"timestamp": "2026-04-25T15:01:26.758917", "level": "DEBUG", "name": "CoachDB", "message": "\u23f1\ufe0f get_conn took 0.0000s"}
+{"timestamp": "2026-04-25T15:01:26.820874", "level": "INFO", "name": "InterviewScheduler", "message": "[917975806891] [917975806891] Scheduled topic 1 'Architecture Challenge' at 14:50 (Asia/Kolkata)", "phone": "917975806891"}
+{"timestamp": "2026-04-25T15:01:26.826893", "level": "INFO", "name": "InterviewScheduler", "message": "[917975806891] [917975806891] Scheduled topic 2 'Kafka' at 14:50 (Asia/Kolkata)", "phone": "917975806891"}
+{"timestamp": "2026-04-25T15:01:26.826893", "level": "INFO", "name": "InterviewScheduler", "message": "[917975806891] [917975806891] Scheduled topic 3 'Agentic AI' at 14:50 (Asia/Kolkata)", "phone": "917975806891"}
+{"timestamp": "2026-04-25T15:01:26.829477", "level": "INFO", "name": "InterviewScheduler", "message": "[917975806891] [917975806891] Scheduled topic 4 'AI News' at 14:50 (Asia/Kolkata)", "phone": "917975806891"}
+{"timestamp": "2026-04-25T15:01:26.829477", "level": "INFO", "name": "InterviewScheduler", "message": "[917975806891] [917975806891] Scheduled topic 5 'Latest Global News' at 14:50 (Asia/Kolkata)", "phone": "917975806891"}
+{"timestamp": "2026-04-25T15:01:26.837620", "level": "INFO", "name": "InterviewScheduler", "message": "[917975806891] \u2705 [917975806891] Scheduler started with per-topic times.", "phone": "917975806891"}
+{"timestamp": "2026-04-25T15:01:26.837620", "level": "DEBUG", "name": "CoachDB", "message": "\u23f1\ufe0f get_conn took 0.0000s"}
+{"timestamp": "2026-04-25T15:01:26.888609", "level": "INFO", "name": "Main", "message": "[917975806891] First run detected \u2014 sending immediate content delivery."}
+{"timestamp": "2026-04-25T15:01:31.904479", "level": "INFO", "name": "InterviewScheduler", "message": "[917975806891] \ud83d\ude80 [917975806891] Starting content delivery cycle", "phone": "917975806891"}
+{"timestamp": "2026-04-25T15:01:31.904990", "level": "DEBUG", "name": "CoachDB", "message": "\u23f1\ufe0f get_conn took 0.0000s"}
+{"timestamp": "2026-04-25T15:01:31.959082", "level": "DEBUG", "name": "SessionManager", "message": "[917975806891] All stale sessions cleared before new daily cycle."}
+{"timestamp": "2026-04-25T15:01:31.959082", "level": "DEBUG", "name": "CoachDB", "message": "\u23f1\ufe0f get_conn took 0.0000s"}
+{"timestamp": "2026-04-25T15:01:32.014426", "level": "INFO", "name": "InterviewScheduler", "message": "[917975806891] [917975806891] Progression: level=Beginner, week=1", "phone": "917975806891"}
+{"timestamp": "2026-04-25T15:01:32.015938", "level": "DEBUG", "name": "CoachDB", "message": "\u23f1\ufe0f get_conn took 0.0000s"}
+{"timestamp": "2026-04-25T15:01:46.330153", "level": "DEBUG", "name": "CoachDB", "message": "\u23f1\ufe0f get_conn took 0.0000s"}
+{"timestamp": "2026-04-25T15:01:46.500597", "level": "INFO", "name": "CoachDB", "message": "\u2705 CoachDB initialised (PostgreSQL)"}
+{"timestamp": "2026-04-25T15:01:48.984963", "level": "DEBUG", "name": "CoachDB", "message": "\u23f1\ufe0f get_conn took 0.0000s"}
+{"timestamp": "2026-04-25T15:01:49.066344", "level": "INFO", "name": "CoachDB", "message": "\u2705 CoachDB initialised (PostgreSQL)"}
+{"timestamp": "2026-04-25T15:01:49.115623", "level": "DEBUG", "name": "CoachDB", "message": "\u23f1\ufe0f get_conn took 0.0000s"}
+{"timestamp": "2026-04-25T15:01:49.194804", "level": "INFO", "name": "CoachDB", "message": "\u2705 CoachDB initialised (PostgreSQL)"}
+{"timestamp": "2026-04-25T15:01:49.208107", "level": "DEBUG", "name": "CoachDB", "message": "\u23f1\ufe0f get_conn took 0.0000s"}
+{"timestamp": "2026-04-25T15:01:49.281357", "level": "DEBUG", "name": "CoachDB", "message": "\u23f1\ufe0f get_conn took 0.0000s"}
+{"timestamp": "2026-04-25T15:01:49.370618", "level": "DEBUG", "name": "CoachDB", "message": "\u23f1\ufe0f get_conn took 0.0000s"}
+{"timestamp": "2026-04-25T15:01:49.446868", "level": "INFO", "name": "CoachDB", "message": "\u2705 CoachDB initialised (PostgreSQL)"}
+{"timestamp": "2026-04-25T15:01:49.454583", "level": "DEBUG", "name": "CoachDB", "message": "\u23f1\ufe0f get_conn took 0.0000s"}
+{"timestamp": "2026-04-25T15:01:49.543481", "level": "DEBUG", "name": "CoachDB", "message": "\u23f1\ufe0f get_conn took 0.0000s"}
+{"timestamp": "2026-04-25T15:01:49.603492", "level": "DEBUG", "name": "CoachDB", "message": "\u23f1\ufe0f get_conn took 0.0000s"}
+{"timestamp": "2026-04-25T15:01:49.619838", "level": "WARNING", "name": "RedisClient", "message": "\u26a0\ufe0f Redis connection failed: Timeout connecting to server. Falling back to PostgreSQL only."}
+{"timestamp": "2026-04-25T15:01:49.624510", "level": "DEBUG", "name": "LLMProvider", "message": "Generating response with openai..."}
+{"timestamp": "2026-04-25T15:01:50.525657", "level": "INFO", "name": "Utils", "message": "Started bot for +917975806891"}
+{"timestamp": "2026-04-25T15:01:50.525657", "level": "DEBUG", "name": "CoachDB", "message": "\u23f1\ufe0f get_conn took 0.0000s"}
+{"timestamp": "2026-04-25T15:01:50.594844", "level": "DEBUG", "name": "CoachDB", "message": "\u23f1\ufe0f get_conn took 0.0000s"}
+{"timestamp": "2026-04-25T15:01:51.515933", "level": "DEBUG", "name": "CoachDB", "message": "\u23f1\ufe0f get_conn took 0.0000s"}
+{"timestamp": "2026-04-25T15:01:51.822206", "level": "DEBUG", "name": "CoachDB", "message": "\u23f1\ufe0f get_conn took 0.0000s"}
+{"timestamp": "2026-04-25T15:01:51.906769", "level": "DEBUG", "name": "CoachDB", "message": "\u23f1\ufe0f get_conn took 0.0000s"}
+{"timestamp": "2026-04-25T15:01:53.413857", "level": "DEBUG", "name": "CoachDB", "message": "\u23f1\ufe0f get_conn took 0.0000s"}
+{"timestamp": "2026-04-25T15:01:53.481049", "level": "INFO", "name": "CoachDB", "message": "\u2705 CoachDB initialised (PostgreSQL)"}
+{"timestamp": "2026-04-25T15:01:53.484088", "level": "INFO", "name": "Main", "message": "============================================="}
+{"timestamp": "2026-04-25T15:01:53.487096", "level": "INFO", "name": "Main", "message": "      Interview Multi-User Bot Daemon         "}
+{"timestamp": "2026-04-25T15:01:53.488642", "level": "INFO", "name": "Main", "message": "============================================="}
+{"timestamp": "2026-04-25T15:01:53.488642", "level": "INFO", "name": "Main", "message": "\ud83d\ude80 Initializing bot for user: 917975806891"}
+{"timestamp": "2026-04-25T15:01:56.392631", "level": "DEBUG", "name": "LLMProvider", "message": "\u23f1\ufe0f generate_response took 24.3222s"}
+{"timestamp": "2026-04-25T15:01:56.393143", "level": "DEBUG", "name": "CoachDB", "message": "\u23f1\ufe0f get_conn took 0.0000s"}
+{"timestamp": "2026-04-25T15:01:56.403722", "level": "DEBUG", "name": "CoachDB", "message": "\u23f1\ufe0f get_conn took 0.0000s"}
+{"timestamp": "2026-04-25T15:01:56.465921", "level": "WARNING", "name": "LLMProvider", "message": "Image generation (DALL-E) is currently disabled as a safe stub."}
+{"timestamp": "2026-04-25T15:01:56.468937", "level": "DEBUG", "name": "LLMProvider", "message": "\u23f1\ufe0f generate_image took 0.0022s"}
+{"timestamp": "2026-04-25T15:01:56.470029", "level": "DEBUG", "name": "CoachDB", "message": "\u23f1\ufe0f get_conn took 0.0000s"}
+{"timestamp": "2026-04-25T15:01:56.479633", "level": "DEBUG", "name": "CoachDB", "message": "\u23f1\ufe0f get_conn took 0.0000s"}
+{"timestamp": "2026-04-25T15:01:56.562911", "level": "INFO", "name": "InterviewScheduler", "message": "[917975806891] [917975806891] Incoming message handler registered.", "phone": "917975806891"}
+{"timestamp": "2026-04-25T15:01:56.566901", "level": "INFO", "name": "WhatsAppClient", "message": "[917975806891] [917975806891] Initiating WhatsApp connection (Attempt 1/3)...", "phone": "917975806891"}
+{"timestamp": "2026-04-25T15:01:56.569779", "level": "DEBUG", "name": "WhatsAppClient", "message": "[917975806891] [917975806891] Waiting for connection signal...", "phone": "917975806891"}
+{"timestamp": "2026-04-25T15:01:57.296688", "level": "DEBUG", "name": "WhatsAppClient", "message": "[917975806891] \u2705 [917975806891] Message sent to User: \"917975806891\"\nRawAgent: 0\nDevice: 0\nIntegrator: 0\nServer: \"s.whatsapp.net\"\nIsEmpty: false\n (Attempt 1)", "phone": "917975806891"}
+{"timestamp": "2026-04-25T15:01:58.155754", "level": "INFO", "name": "WhatsAppClient", "message": "[917975806891] \u2728 [917975806891] Connected successfully!", "phone": "917975806891"}
+{"timestamp": "2026-04-25T15:01:58.157848", "level": "DEBUG", "name": "CoachDB", "message": "\u23f1\ufe0f get_conn took 0.0000s"}
+{"timestamp": "2026-04-25T15:01:58.228405", "level": "INFO", "name": "WhatsAppClient", "message": "[917975806891] \u2705 [917975806891] WhatsApp connection ready.", "phone": "917975806891"}
+{"timestamp": "2026-04-25T15:01:58.231020", "level": "DEBUG", "name": "CoachDB", "message": "\u23f1\ufe0f get_conn took 0.0000s"}
+{"timestamp": "2026-04-25T15:01:58.404531", "level": "INFO", "name": "InterviewScheduler", "message": "[917975806891] [917975806891] Scheduled topic 1 'Architecture Challenge' at 14:50 (Asia/Kolkata)", "phone": "917975806891"}
+{"timestamp": "2026-04-25T15:01:58.408616", "level": "INFO", "name": "InterviewScheduler", "message": "[917975806891] [917975806891] Scheduled topic 2 'Kafka' at 14:50 (Asia/Kolkata)", "phone": "917975806891"}
+{"timestamp": "2026-04-25T15:01:58.412757", "level": "INFO", "name": "InterviewScheduler", "message": "[917975806891] [917975806891] Scheduled topic 3 'Agentic AI' at 14:50 (Asia/Kolkata)", "phone": "917975806891"}
+{"timestamp": "2026-04-25T15:01:58.414783", "level": "INFO", "name": "InterviewScheduler", "message": "[917975806891] [917975806891] Scheduled topic 4 'AI News' at 14:50 (Asia/Kolkata)", "phone": "917975806891"}
+{"timestamp": "2026-04-25T15:01:58.415805", "level": "INFO", "name": "InterviewScheduler", "message": "[917975806891] [917975806891] Scheduled topic 5 'Latest Global News' at 14:50 (Asia/Kolkata)", "phone": "917975806891"}
+{"timestamp": "2026-04-25T15:01:58.421160", "level": "INFO", "name": "InterviewScheduler", "message": "[917975806891] \u2705 [917975806891] Scheduler started with per-topic times.", "phone": "917975806891"}
+{"timestamp": "2026-04-25T15:01:58.429180", "level": "DEBUG", "name": "CoachDB", "message": "\u23f1\ufe0f get_conn took 0.0000s"}
+{"timestamp": "2026-04-25T15:01:58.484112", "level": "INFO", "name": "Main", "message": "[917975806891] First run detected \u2014 sending immediate content delivery."}
+{"timestamp": "2026-04-25T15:02:02.297976", "level": "DEBUG", "name": "CoachDB", "message": "\u23f1\ufe0f get_conn took 0.0000s"}
+{"timestamp": "2026-04-25T15:02:02.367766", "level": "DEBUG", "name": "CoachDB", "message": "\u23f1\ufe0f get_conn took 0.0000s"}
+{"timestamp": "2026-04-25T15:02:02.419379", "level": "DEBUG", "name": "LLMProvider", "message": "Generating response with openai..."}
+{"timestamp": "2026-04-25T15:02:03.497737", "level": "INFO", "name": "InterviewScheduler", "message": "[917975806891] \ud83d\ude80 [917975806891] Starting content delivery cycle", "phone": "917975806891"}
+{"timestamp": "2026-04-25T15:02:03.497737", "level": "DEBUG", "name": "CoachDB", "message": "\u23f1\ufe0f get_conn took 0.0000s"}
+{"timestamp": "2026-04-25T15:02:03.560294", "level": "DEBUG", "name": "SessionManager", "message": "[917975806891] All stale sessions cleared before new daily cycle."}
+{"timestamp": "2026-04-25T15:02:03.560294", "level": "DEBUG", "name": "CoachDB", "message": "\u23f1\ufe0f get_conn took 0.0000s"}
+{"timestamp": "2026-04-25T15:02:03.613808", "level": "INFO", "name": "InterviewScheduler", "message": "[917975806891] [917975806891] Progression: level=Beginner, week=1", "phone": "917975806891"}
+{"timestamp": "2026-04-25T15:02:03.615829", "level": "DEBUG", "name": "CoachDB", "message": "\u23f1\ufe0f get_conn took 0.0000s"}
+{"timestamp": "2026-04-25T15:02:11.035822", "level": "DEBUG", "name": "LLMProvider", "message": "\u23f1\ufe0f generate_response took 8.6165s"}
+{"timestamp": "2026-04-25T15:02:11.036859", "level": "DEBUG", "name": "CoachDB", "message": "\u23f1\ufe0f get_conn took 0.0000s"}
+{"timestamp": "2026-04-25T15:02:11.102679", "level": "DEBUG", "name": "CoachDB", "message": "\u23f1\ufe0f get_conn took 0.0000s"}
+{"timestamp": "2026-04-25T15:02:11.153301", "level": "DEBUG", "name": "SessionManager", "message": "[917975806891] Question enqueued \u2014 topic='Kafka'"}
+{"timestamp": "2026-04-25T15:02:11.153301", "level": "DEBUG", "name": "CoachDB", "message": "\u23f1\ufe0f get_conn took 0.0000s"}
+{"timestamp": "2026-04-25T15:02:11.233466", "level": "ERROR", "name": "WhatsAppClient", "message": "[917975806891] Error sending message (Attempt 1): failed to send message node: websocket not connected", "phone": "917975806891"}
+{"timestamp": "2026-04-25T15:02:15.446745", "level": "WARNING", "name": "RedisClient", "message": "\u26a0\ufe0f Redis connection failed: Timeout connecting to server. Falling back to PostgreSQL only."}
+{"timestamp": "2026-04-25T15:02:15.451034", "level": "DEBUG", "name": "LLMProvider", "message": "Generating response with openai..."}
+{"timestamp": "2026-04-25T15:02:16.264924", "level": "ERROR", "name": "WhatsAppClient", "message": "[917975806891] Error sending message (Attempt 2): failed to send message node: websocket not connected", "phone": "917975806891"}
+{"timestamp": "2026-04-25T15:02:20.459137", "level": "DEBUG", "name": "LLMProvider", "message": "\u23f1\ufe0f generate_response took 16.7850s"}
+{"timestamp": "2026-04-25T15:02:20.460140", "level": "DEBUG", "name": "CoachDB", "message": "\u23f1\ufe0f get_conn took 0.0000s"}
+{"timestamp": "2026-04-25T15:02:20.517031", "level": "WARNING", "name": "LLMProvider", "message": "Image generation (DALL-E) is currently disabled as a safe stub."}
+{"timestamp": "2026-04-25T15:02:20.519029", "level": "DEBUG", "name": "LLMProvider", "message": "\u23f1\ufe0f generate_image took 0.0021s"}
+{"timestamp": "2026-04-25T15:02:20.521583", "level": "DEBUG", "name": "CoachDB", "message": "\u23f1\ufe0f get_conn took 0.0000s"}
+{"timestamp": "2026-04-25T15:02:21.855763", "level": "DEBUG", "name": "WhatsAppClient", "message": "[917975806891] \u2705 [917975806891] Message sent to User: \"917975806891\"\nRawAgent: 0\nDevice: 0\nIntegrator: 0\nServer: \"s.whatsapp.net\"\nIsEmpty: false\n (Attempt 1)", "phone": "917975806891"}
+{"timestamp": "2026-04-25T15:02:26.299144", "level": "ERROR", "name": "WhatsAppClient", "message": "[917975806891] Error sending message (Attempt 3): failed to send message node: websocket not connected", "phone": "917975806891"}
+{"timestamp": "2026-04-25T15:02:26.300182", "level": "ERROR", "name": "ChannelSender", "message": "WhatsApp Deployment Error for +917975806891: failed to send message node: websocket not connected"}
+{"timestamp": "2026-04-25T15:02:26.863796", "level": "DEBUG", "name": "CoachDB", "message": "\u23f1\ufe0f get_conn took 0.0000s"}
+{"timestamp": "2026-04-25T15:02:26.896024", "level": "DEBUG", "name": "CoachDB", "message": "\u23f1\ufe0f get_conn took 0.0000s"}
+{"timestamp": "2026-04-25T15:02:26.942007", "level": "DEBUG", "name": "CoachDB", "message": "\u23f1\ufe0f get_conn took 0.0000s"}
+{"timestamp": "2026-04-25T15:02:27.003354", "level": "DEBUG", "name": "LLMProvider", "message": "Generating response with openai..."}
+{"timestamp": "2026-04-25T15:02:31.302636", "level": "DEBUG", "name": "CoachDB", "message": "\u23f1\ufe0f get_conn took 0.0000s"}
+{"timestamp": "2026-04-25T15:02:31.362227", "level": "DEBUG", "name": "LLMProvider", "message": "Generating response with openai..."}
+{"timestamp": "2026-04-25T15:02:33.508700", "level": "DEBUG", "name": "LLMProvider", "message": "\u23f1\ufe0f generate_response took 6.5050s"}
+{"timestamp": "2026-04-25T15:02:33.508700", "level": "DEBUG", "name": "CoachDB", "message": "\u23f1\ufe0f get_conn took 0.0000s"}
+{"timestamp": "2026-04-25T15:02:33.579729", "level": "DEBUG", "name": "CoachDB", "message": "\u23f1\ufe0f get_conn took 0.0000s"}
+{"timestamp": "2026-04-25T15:02:33.632610", "level": "DEBUG", "name": "SessionManager", "message": "[917975806891] Question enqueued \u2014 topic='Kafka'"}
+{"timestamp": "2026-04-25T15:02:33.632610", "level": "DEBUG", "name": "CoachDB", "message": "\u23f1\ufe0f get_conn took 0.0000s"}
+{"timestamp": "2026-04-25T15:02:34.510865", "level": "DEBUG", "name": "WhatsAppClient", "message": "[917975806891] \u2705 [917975806891] Message sent to User: \"917975806891\"\nRawAgent: 0\nDevice: 0\nIntegrator: 0\nServer: \"s.whatsapp.net\"\nIsEmpty: false\n (Attempt 1)", "phone": "917975806891"}
+{"timestamp": "2026-04-25T15:02:34.575307", "level": "DEBUG", "name": "CoachDB", "message": "\u23f1\ufe0f get_conn took 0.0000s"}
+{"timestamp": "2026-04-25T15:02:34.661510", "level": "INFO", "name": "CoachDB", "message": "\u2705 CoachDB initialised (PostgreSQL)"}
+{"timestamp": "2026-04-25T15:02:34.670969", "level": "DEBUG", "name": "CoachDB", "message": "\u23f1\ufe0f get_conn took 0.0000s"}
+{"timestamp": "2026-04-25T15:02:34.757703", "level": "DEBUG", "name": "CoachDB", "message": "\u23f1\ufe0f get_conn took 0.0000s"}
+{"timestamp": "2026-04-25T15:02:34.825610", "level": "DEBUG", "name": "CoachDB", "message": "\u23f1\ufe0f get_conn took 0.0000s"}
+{"timestamp": "2026-04-25T15:02:35.658572", "level": "DEBUG", "name": "CoachDB", "message": "\u23f1\ufe0f get_conn took 0.0000s"}
+{"timestamp": "2026-04-25T15:02:35.715053", "level": "DEBUG", "name": "CoachDB", "message": "\u23f1\ufe0f get_conn took 0.0000s"}
+{"timestamp": "2026-04-25T15:02:36.562033", "level": "DEBUG", "name": "CoachDB", "message": "\u23f1\ufe0f get_conn took 0.0000s"}
+{"timestamp": "2026-04-25T15:02:36.661220", "level": "DEBUG", "name": "CoachDB", "message": "\u23f1\ufe0f get_conn took 0.0000s"}
+{"timestamp": "2026-04-25T15:02:36.770832", "level": "DEBUG", "name": "CoachDB", "message": "\u23f1\ufe0f get_conn took 0.0000s"}
+{"timestamp": "2026-04-25T15:02:36.850432", "level": "DEBUG", "name": "CoachDB", "message": "\u23f1\ufe0f get_conn took 0.0000s"}
+{"timestamp": "2026-04-25T15:02:37.467940", "level": "DEBUG", "name": "LLMProvider", "message": "\u23f1\ufe0f generate_response took 6.1063s"}
+{"timestamp": "2026-04-25T15:02:37.469010", "level": "DEBUG", "name": "CoachDB", "message": "\u23f1\ufe0f get_conn took 0.0000s"}
+{"timestamp": "2026-04-25T15:02:37.531740", "level": "DEBUG", "name": "CoachDB", "message": "\u23f1\ufe0f get_conn took 0.0000s"}
+{"timestamp": "2026-04-25T15:02:37.583902", "level": "DEBUG", "name": "SessionManager", "message": "[917975806891] Question enqueued \u2014 topic='Agentic AI'"}
+{"timestamp": "2026-04-25T15:02:37.583902", "level": "DEBUG", "name": "CoachDB", "message": "\u23f1\ufe0f get_conn took 0.0000s"}
+{"timestamp": "2026-04-25T15:02:37.650455", "level": "ERROR", "name": "WhatsAppClient", "message": "[917975806891] Error sending message (Attempt 1): failed to send message node: websocket not connected", "phone": "917975806891"}
+{"timestamp": "2026-04-25T15:02:39.520198", "level": "DEBUG", "name": "CoachDB", "message": "\u23f1\ufe0f get_conn took 0.0000s"}
+{"timestamp": "2026-04-25T15:02:39.570830", "level": "DEBUG", "name": "LLMProvider", "message": "Generating response with openai..."}
+{"timestamp": "2026-04-25T15:02:42.662297", "level": "ERROR", "name": "WhatsAppClient", "message": "[917975806891] Error sending message (Attempt 2): failed to send message node: websocket not connected", "phone": "917975806891"}
+{"timestamp": "2026-04-25T15:02:45.204497", "level": "DEBUG", "name": "LLMProvider", "message": "\u23f1\ufe0f generate_response took 5.6316s"}
+{"timestamp": "2026-04-25T15:02:45.207507", "level": "DEBUG", "name": "CoachDB", "message": "\u23f1\ufe0f get_conn took 0.0000s"}
+{"timestamp": "2026-04-25T15:02:45.270246", "level": "DEBUG", "name": "CoachDB", "message": "\u23f1\ufe0f get_conn took 0.0000s"}
+{"timestamp": "2026-04-25T15:02:45.320718", "level": "DEBUG", "name": "SessionManager", "message": "[917975806891] Question enqueued \u2014 topic='Agentic AI'"}
+{"timestamp": "2026-04-25T15:02:45.320718", "level": "DEBUG", "name": "CoachDB", "message": "\u23f1\ufe0f get_conn took 0.0000s"}
+{"timestamp": "2026-04-25T15:02:46.194206", "level": "DEBUG", "name": "WhatsAppClient", "message": "[917975806891] \u2705 [917975806891] Message sent to User: \"917975806891\"\nRawAgent: 0\nDevice: 0\nIntegrator: 0\nServer: \"s.whatsapp.net\"\nIsEmpty: false\n (Attempt 1)", "phone": "917975806891"}
+{"timestamp": "2026-04-25T15:02:51.195564", "level": "DEBUG", "name": "LLMProvider", "message": "Generating response with openai..."}
+{"timestamp": "2026-04-25T15:02:52.686007", "level": "ERROR", "name": "WhatsAppClient", "message": "[917975806891] Error sending message (Attempt 3): failed to send message node: websocket not connected", "phone": "917975806891"}
+{"timestamp": "2026-04-25T15:02:52.687030", "level": "ERROR", "name": "ChannelSender", "message": "WhatsApp Deployment Error for +917975806891: failed to send message node: websocket not connected"}
+{"timestamp": "2026-04-25T15:02:55.876013", "level": "DEBUG", "name": "LLMProvider", "message": "\u23f1\ufe0f generate_response took 4.6805s"}
+{"timestamp": "2026-04-25T15:02:55.876526", "level": "DEBUG", "name": "CoachDB", "message": "\u23f1\ufe0f get_conn took 0.0000s"}
+{"timestamp": "2026-04-25T15:02:55.939723", "level": "DEBUG", "name": "CoachDB", "message": "\u23f1\ufe0f get_conn took 0.0000s"}
+{"timestamp": "2026-04-25T15:02:56.795677", "level": "DEBUG", "name": "WhatsAppClient", "message": "[917975806891] \u2705 [917975806891] Message sent to User: \"917975806891\"\nRawAgent: 0\nDevice: 0\nIntegrator: 0\nServer: \"s.whatsapp.net\"\nIsEmpty: false\n (Attempt 1)", "phone": "917975806891"}
+{"timestamp": "2026-04-25T15:02:57.695626", "level": "DEBUG", "name": "LLMProvider", "message": "Generating response with openai..."}
+{"timestamp": "2026-04-25T15:02:58.497528", "level": "DEBUG", "name": "CoachDB", "message": "\u23f1\ufe0f get_conn took 0.0000s"}
+{"timestamp": "2026-04-25T15:02:58.550788", "level": "INFO", "name": "InterviewScheduler", "message": "[917975806891] \ud83d\udd04 [917975806891] Config change detected \u2014 hot-reloading per-topic jobs...", "phone": "917975806891"}
+{"timestamp": "2026-04-25T15:02:58.560108", "level": "INFO", "name": "InterviewScheduler", "message": "[917975806891] [917975806891] Scheduled topic 1 'Architecture Challenge' at 15:03 (Asia/Kolkata)", "phone": "917975806891"}
+{"timestamp": "2026-04-25T15:02:58.562675", "level": "INFO", "name": "InterviewScheduler", "message": "[917975806891] [917975806891] Scheduled topic 2 'Backend interview quiestion and Answers topics wise' at 15:03 (Asia/Kolkata)", "phone": "917975806891"}
+{"timestamp": "2026-04-25T15:02:58.563684", "level": "INFO", "name": "InterviewScheduler", "message": "[917975806891] [917975806891] Scheduled topic 3 'Reactjs' at 15:03 (Asia/Kolkata)", "phone": "917975806891"}
+{"timestamp": "2026-04-25T15:02:58.565717", "level": "INFO", "name": "InterviewScheduler", "message": "[917975806891] [917975806891] Scheduled topic 4 'ML and Agentic-AI topics wise detailed explanation' at 15:03 (Asia/Kolkata)", "phone": "917975806891"}
+{"timestamp": "2026-04-25T15:02:58.569237", "level": "INFO", "name": "InterviewScheduler", "message": "[917975806891] [917975806891] Scheduled topic 5 'Machine Learning' at 15:03 (Asia/Kolkata)", "phone": "917975806891"}
+{"timestamp": "2026-04-25T15:02:58.570854", "level": "INFO", "name": "InterviewScheduler", "message": "[917975806891] \u2705 [917975806891] Per-topic jobs hot-reloaded.", "phone": "917975806891"}
+{"timestamp": "2026-04-25T15:03:00.012895", "level": "DEBUG", "name": "CoachDB", "message": "\u23f1\ufe0f get_conn took 0.0000s"}
+{"timestamp": "2026-04-25T15:03:00.082029", "level": "INFO", "name": "InterviewScheduler", "message": "[917975806891] [917975806891] Delivering topic 1: Architecture Challenge", "phone": "917975806891"}
+{"timestamp": "2026-04-25T15:03:00.082547", "level": "DEBUG", "name": "CoachDB", "message": "\u23f1\ufe0f get_conn took 0.0000s"}
+{"timestamp": "2026-04-25T15:03:00.145055", "level": "DEBUG", "name": "SessionManager", "message": "[917975806891] All stale sessions cleared before new daily cycle."}
+{"timestamp": "2026-04-25T15:03:00.146111", "level": "DEBUG", "name": "CoachDB", "message": "\u23f1\ufe0f get_conn took 0.0000s"}
+{"timestamp": "2026-04-25T15:03:00.203590", "level": "DEBUG", "name": "LLMProvider", "message": "Generating response with openai..."}
+{"timestamp": "2026-04-25T15:03:00.207679", "level": "DEBUG", "name": "CoachDB", "message": "\u23f1\ufe0f get_conn took 0.0000s"}
+{"timestamp": "2026-04-25T15:03:00.269189", "level": "INFO", "name": "InterviewScheduler", "message": "[917975806891] [917975806891] Delivering topic 2: Backend interview quiestion and Answers topics wise", "phone": "917975806891"}
+{"timestamp": "2026-04-25T15:03:00.270612", "level": "DEBUG", "name": "CoachDB", "message": "\u23f1\ufe0f get_conn took 0.0000s"}
+{"timestamp": "2026-04-25T15:03:00.323786", "level": "DEBUG", "name": "SessionManager", "message": "[917975806891] All stale sessions cleared before new daily cycle."}
+{"timestamp": "2026-04-25T15:03:00.323786", "level": "DEBUG", "name": "CoachDB", "message": "\u23f1\ufe0f get_conn took 0.0000s"}
+{"timestamp": "2026-04-25T15:03:00.382586", "level": "DEBUG", "name": "CoachDB", "message": "\u23f1\ufe0f get_conn took 0.0000s"}
+{"timestamp": "2026-04-25T15:03:00.438816", "level": "DEBUG", "name": "LLMProvider", "message": "Generating response with openai..."}
+{"timestamp": "2026-04-25T15:03:00.444933", "level": "DEBUG", "name": "CoachDB", "message": "\u23f1\ufe0f get_conn took 0.0000s"}
+{"timestamp": "2026-04-25T15:03:00.500869", "level": "INFO", "name": "InterviewScheduler", "message": "[917975806891] [917975806891] Delivering topic 3: Reactjs", "phone": "917975806891"}
+{"timestamp": "2026-04-25T15:03:00.500869", "level": "DEBUG", "name": "CoachDB", "message": "\u23f1\ufe0f get_conn took 0.0000s"}
+{"timestamp": "2026-04-25T15:03:00.560242", "level": "DEBUG", "name": "SessionManager", "message": "[917975806891] All stale sessions cleared before new daily cycle."}
+{"timestamp": "2026-04-25T15:03:00.562252", "level": "DEBUG", "name": "CoachDB", "message": "\u23f1\ufe0f get_conn took 0.0000s"}
+{"timestamp": "2026-04-25T15:03:00.618842", "level": "DEBUG", "name": "CoachDB", "message": "\u23f1\ufe0f get_conn took 0.0000s"}
+{"timestamp": "2026-04-25T15:03:00.670531", "level": "DEBUG", "name": "LLMProvider", "message": "Generating response with openai..."}
+{"timestamp": "2026-04-25T15:03:00.670531", "level": "DEBUG", "name": "CoachDB", "message": "\u23f1\ufe0f get_conn took 0.0000s"}
+{"timestamp": "2026-04-25T15:03:00.731212", "level": "INFO", "name": "InterviewScheduler", "message": "[917975806891] [917975806891] Delivering topic 4: ML and Agentic-AI topics wise detailed explanation", "phone": "917975806891"}
+{"timestamp": "2026-04-25T15:03:00.732731", "level": "DEBUG", "name": "CoachDB", "message": "\u23f1\ufe0f get_conn took 0.0000s"}
+{"timestamp": "2026-04-25T15:03:00.792495", "level": "DEBUG", "name": "SessionManager", "message": "[917975806891] All stale sessions cleared before new daily cycle."}
+{"timestamp": "2026-04-25T15:03:00.803495", "level": "DEBUG", "name": "CoachDB", "message": "\u23f1\ufe0f get_conn took 0.0000s"}
+{"timestamp": "2026-04-25T15:03:00.857777", "level": "INFO", "name": "InterviewScheduler", "message": "[917975806891] [917975806891] Delivering topic 5: Machine Learning", "phone": "917975806891"}
+{"timestamp": "2026-04-25T15:03:00.858785", "level": "DEBUG", "name": "CoachDB", "message": "\u23f1\ufe0f get_conn took 0.0000s"}
+{"timestamp": "2026-04-25T15:03:00.915914", "level": "DEBUG", "name": "SessionManager", "message": "[917975806891] All stale sessions cleared before new daily cycle."}
+{"timestamp": "2026-04-25T15:03:01.015541", "level": "ERROR", "name": "InterviewScheduler", "message": "[917975806891] MCP Error for Machine Learning: unhandled errors in a TaskGroup (1 sub-exception)", "phone": "917975806891"}
+{"timestamp": "2026-04-25T15:03:01.019122", "level": "DEBUG", "name": "LLMProvider", "message": "Generating response with openai..."}
+{"timestamp": "2026-04-25T15:03:01.897120", "level": "ERROR", "name": "InterviewScheduler", "message": "[917975806891] MCP Integration Error for Latest Global News: unhandled errors in a TaskGroup (1 sub-exception)", "phone": "917975806891"}
+{"timestamp": "2026-04-25T15:03:01.897120", "level": "DEBUG", "name": "LLMProvider", "message": "Generating response with openai..."}
+{"timestamp": "2026-04-25T15:03:03.401935", "level": "DEBUG", "name": "LLMProvider", "message": "\u23f1\ufe0f generate_response took 3.1985s"}
+{"timestamp": "2026-04-25T15:03:03.403458", "level": "DEBUG", "name": "CoachDB", "message": "\u23f1\ufe0f get_conn took 0.0000s"}
+{"timestamp": "2026-04-25T15:03:03.566092", "level": "WARNING", "name": "LLMProvider", "message": "Image generation (DALL-E) is currently disabled as a safe stub."}
+{"timestamp": "2026-04-25T15:03:03.570347", "level": "DEBUG", "name": "LLMProvider", "message": "\u23f1\ufe0f generate_image took 0.0019s"}
+{"timestamp": "2026-04-25T15:03:03.570903", "level": "DEBUG", "name": "CoachDB", "message": "\u23f1\ufe0f get_conn took 0.0000s"}
+{"timestamp": "2026-04-25T15:03:03.950778", "level": "DEBUG", "name": "LLMProvider", "message": "\u23f1\ufe0f generate_response took 6.2572s"}
+{"timestamp": "2026-04-25T15:03:03.953334", "level": "DEBUG", "name": "CoachDB", "message": "\u23f1\ufe0f get_conn took 0.0000s"}
+{"timestamp": "2026-04-25T15:03:04.021309", "level": "DEBUG", "name": "CoachDB", "message": "\u23f1\ufe0f get_conn took 0.0000s"}
+{"timestamp": "2026-04-25T15:03:04.085503", "level": "ERROR", "name": "WhatsAppClient", "message": "[917975806891] Error sending message (Attempt 1): failed to send message node: websocket not connected", "phone": "917975806891"}
+{"timestamp": "2026-04-25T15:03:04.388624", "level": "DEBUG", "name": "WhatsAppClient", "message": "[917975806891] \u2705 [917975806891] Message sent to User: \"917975806891\"\nRawAgent: 0\nDevice: 0\nIntegrator: 0\nServer: \"s.whatsapp.net\"\nIsEmpty: false\n (Attempt 1)", "phone": "917975806891"}
+{"timestamp": "2026-04-25T15:03:04.389212", "level": "INFO", "name": "InterviewScheduler", "message": "[917975806891] \u2705 [917975806891] Topic 1 delivery done.", "phone": "917975806891"}
+{"timestamp": "2026-04-25T15:03:06.434996", "level": "DEBUG", "name": "LLMProvider", "message": "\u23f1\ufe0f generate_response took 5.4155s"}
+{"timestamp": "2026-04-25T15:03:06.434996", "level": "DEBUG", "name": "CoachDB", "message": "\u23f1\ufe0f get_conn took 0.0000s"}
+{"timestamp": "2026-04-25T15:03:06.500964", "level": "DEBUG", "name": "CoachDB", "message": "\u23f1\ufe0f get_conn took 0.0000s"}
+{"timestamp": "2026-04-25T15:03:07.357495", "level": "DEBUG", "name": "WhatsAppClient", "message": "[917975806891] \u2705 [917975806891] Message sent to User: \"917975806891\"\nRawAgent: 0\nDevice: 0\nIntegrator: 0\nServer: \"s.whatsapp.net\"\nIsEmpty: false\n (Attempt 1)", "phone": "917975806891"}
+{"timestamp": "2026-04-25T15:03:07.358032", "level": "INFO", "name": "InterviewScheduler", "message": "[917975806891] \u2705 [917975806891] Topic 5 delivery done.", "phone": "917975806891"}
+{"timestamp": "2026-04-25T15:03:08.959027", "level": "DEBUG", "name": "LLMProvider", "message": "\u23f1\ufe0f generate_response took 7.0591s"}
+{"timestamp": "2026-04-25T15:03:08.959027", "level": "DEBUG", "name": "CoachDB", "message": "\u23f1\ufe0f get_conn took 0.0000s"}
+{"timestamp": "2026-04-25T15:03:09.037588", "level": "DEBUG", "name": "CoachDB", "message": "\u23f1\ufe0f get_conn took 0.0000s"}
+{"timestamp": "2026-04-25T15:03:09.106152", "level": "ERROR", "name": "WhatsAppClient", "message": "[917975806891] Error sending message (Attempt 2): failed to send message node: websocket not connected", "phone": "917975806891"}
+{"timestamp": "2026-04-25T15:03:09.615837", "level": "DEBUG", "name": "LLMProvider", "message": "\u23f1\ufe0f generate_response took 8.9446s"}
+{"timestamp": "2026-04-25T15:03:09.615837", "level": "DEBUG", "name": "CoachDB", "message": "\u23f1\ufe0f get_conn took 0.0000s"}
+{"timestamp": "2026-04-25T15:03:09.678102", "level": "DEBUG", "name": "CoachDB", "message": "\u23f1\ufe0f get_conn took 0.0000s"}
+{"timestamp": "2026-04-25T15:03:09.838838", "level": "DEBUG", "name": "SessionManager", "message": "[917975806891] Question enqueued \u2014 topic='Reactjs'"}
+{"timestamp": "2026-04-25T15:03:09.842859", "level": "DEBUG", "name": "CoachDB", "message": "\u23f1\ufe0f get_conn took 0.0000s"}
+{"timestamp": "2026-04-25T15:03:09.897407", "level": "DEBUG", "name": "LLMProvider", "message": "\u23f1\ufe0f generate_response took 9.4594s"}
+{"timestamp": "2026-04-25T15:03:09.899232", "level": "DEBUG", "name": "CoachDB", "message": "\u23f1\ufe0f get_conn took 0.0000s"}
+{"timestamp": "2026-04-25T15:03:09.960284", "level": "DEBUG", "name": "CoachDB", "message": "\u23f1\ufe0f get_conn took 0.0000s"}
+{"timestamp": "2026-04-25T15:03:10.015597", "level": "DEBUG", "name": "SessionManager", "message": "[917975806891] Question enqueued \u2014 topic='Backend interview quiestion and Answers topics wise'"}
+{"timestamp": "2026-04-25T15:03:10.015597", "level": "DEBUG", "name": "CoachDB", "message": "\u23f1\ufe0f get_conn took 0.0000s"}
+{"timestamp": "2026-04-25T15:03:10.094601", "level": "DEBUG", "name": "WhatsAppClient", "message": "[917975806891] \u2705 [917975806891] Message sent to User: \"917975806891\"\nRawAgent: 0\nDevice: 0\nIntegrator: 0\nServer: \"s.whatsapp.net\"\nIsEmpty: false\n (Attempt 1)", "phone": "917975806891"}
+{"timestamp": "2026-04-25T15:03:10.095657", "level": "INFO", "name": "InterviewScheduler", "message": "[917975806891] \u2705 [917975806891] Content delivery cycle completed.", "phone": "917975806891"}
+{"timestamp": "2026-04-25T15:03:10.731345", "level": "DEBUG", "name": "WhatsAppClient", "message": "[917975806891] \u2705 [917975806891] Message sent to User: \"917975806891\"\nRawAgent: 0\nDevice: 0\nIntegrator: 0\nServer: \"s.whatsapp.net\"\nIsEmpty: false\n (Attempt 1)", "phone": "917975806891"}
+{"timestamp": "2026-04-25T15:03:10.732384", "level": "INFO", "name": "InterviewScheduler", "message": "[917975806891] \u2705 [917975806891] Topic 3 delivery done.", "phone": "917975806891"}
+{"timestamp": "2026-04-25T15:03:11.520063", "level": "DEBUG", "name": "WhatsAppClient", "message": "[917975806891] \u2705 [917975806891] Message sent to User: \"917975806891\"\nRawAgent: 0\nDevice: 0\nIntegrator: 0\nServer: \"s.whatsapp.net\"\nIsEmpty: false\n (Attempt 1)", "phone": "917975806891"}
+{"timestamp": "2026-04-25T15:03:11.520651", "level": "INFO", "name": "InterviewScheduler", "message": "[917975806891] \u2705 [917975806891] Topic 2 delivery done.", "phone": "917975806891"}
+{"timestamp": "2026-04-25T15:03:19.141457", "level": "ERROR", "name": "WhatsAppClient", "message": "[917975806891] Error sending message (Attempt 3): failed to send message node: websocket not connected", "phone": "917975806891"}
+{"timestamp": "2026-04-25T15:03:19.141962", "level": "ERROR", "name": "ChannelSender", "message": "WhatsApp Deployment Error for +917975806891: failed to send message node: websocket not connected"}
+{"timestamp": "2026-04-25T15:03:24.248657", "level": "ERROR", "name": "InterviewScheduler", "message": "[917975806891] MCP Integration Error for Latest Global News: unhandled errors in a TaskGroup (1 sub-exception)", "phone": "917975806891"}
+{"timestamp": "2026-04-25T15:03:24.248657", "level": "DEBUG", "name": "LLMProvider", "message": "Generating response with openai..."}
+{"timestamp": "2026-04-25T15:03:26.986179", "level": "DEBUG", "name": "CoachDB", "message": "\u23f1\ufe0f get_conn took 0.0000s"}
+{"timestamp": "2026-04-25T15:03:27.034257", "level": "INFO", "name": "InterviewScheduler", "message": "[917975806891] \ud83d\udd04 [917975806891] Config change detected \u2014 hot-reloading per-topic jobs...", "phone": "917975806891"}
+{"timestamp": "2026-04-25T15:03:27.038811", "level": "INFO", "name": "InterviewScheduler", "message": "[917975806891] [917975806891] Scheduled topic 1 'Architecture Challenge' at 15:03 (Asia/Kolkata)", "phone": "917975806891"}
+{"timestamp": "2026-04-25T15:03:27.038811", "level": "INFO", "name": "InterviewScheduler", "message": "[917975806891] [917975806891] Scheduled topic 2 'Backend interview quiestion and Answers topics wise' at 15:03 (Asia/Kolkata)", "phone": "917975806891"}
+{"timestamp": "2026-04-25T15:03:27.042828", "level": "INFO", "name": "InterviewScheduler", "message": "[917975806891] [917975806891] Scheduled topic 3 'Reactjs' at 15:03 (Asia/Kolkata)", "phone": "917975806891"}
+{"timestamp": "2026-04-25T15:03:27.044922", "level": "INFO", "name": "InterviewScheduler", "message": "[917975806891] [917975806891] Scheduled topic 4 'ML and Agentic-AI topics wise detailed explanation' at 15:03 (Asia/Kolkata)", "phone": "917975806891"}
+{"timestamp": "2026-04-25T15:03:27.045987", "level": "INFO", "name": "InterviewScheduler", "message": "[917975806891] [917975806891] Scheduled topic 5 'Machine Learning' at 15:03 (Asia/Kolkata)", "phone": "917975806891"}
+{"timestamp": "2026-04-25T15:03:27.047497", "level": "INFO", "name": "InterviewScheduler", "message": "[917975806891] \u2705 [917975806891] Per-topic jobs hot-reloaded.", "phone": "917975806891"}
+{"timestamp": "2026-04-25T15:03:29.615762", "level": "DEBUG", "name": "LLMProvider", "message": "\u23f1\ufe0f generate_response took 5.3658s"}
+{"timestamp": "2026-04-25T15:03:29.615762", "level": "DEBUG", "name": "CoachDB", "message": "\u23f1\ufe0f get_conn took 0.0000s"}
+{"timestamp": "2026-04-25T15:03:29.683129", "level": "DEBUG", "name": "CoachDB", "message": "\u23f1\ufe0f get_conn took 0.0000s"}
+{"timestamp": "2026-04-25T15:03:29.745058", "level": "ERROR", "name": "WhatsAppClient", "message": "[917975806891] Error sending message (Attempt 1): failed to send message node: websocket not connected", "phone": "917975806891"}
+{"timestamp": "2026-04-25T15:03:34.763392", "level": "ERROR", "name": "WhatsAppClient", "message": "[917975806891] Error sending message (Attempt 2): failed to send message node: websocket not connected", "phone": "917975806891"}
+{"timestamp": "2026-04-25T15:03:44.789165", "level": "ERROR", "name": "WhatsAppClient", "message": "[917975806891] Error sending message (Attempt 3): failed to send message node: websocket not connected", "phone": "917975806891"}
+{"timestamp": "2026-04-25T15:03:44.790264", "level": "ERROR", "name": "ChannelSender", "message": "WhatsApp Deployment Error for +917975806891: failed to send message node: websocket not connected"}
+{"timestamp": "2026-04-25T15:03:44.790829", "level": "INFO", "name": "InterviewScheduler", "message": "[917975806891] \u2705 [917975806891] Content delivery cycle completed.", "phone": "917975806891"}
+{"timestamp": "2026-04-25T15:03:58.567663", "level": "DEBUG", "name": "CoachDB", "message": "\u23f1\ufe0f get_conn took 0.0000s"}
+{"timestamp": "2026-04-25T15:04:10.102036", "level": "DEBUG", "name": "Main", "message": "Heartbeat \u2014 917975806891 (Connected: True)"}
+{"timestamp": "2026-04-25T15:04:27.055933", "level": "DEBUG", "name": "CoachDB", "message": "\u23f1\ufe0f get_conn took 0.0000s"}
+{"timestamp": "2026-04-25T15:04:44.794929", "level": "DEBUG", "name": "Main", "message": "Heartbeat \u2014 917975806891 (Connected: True)"}
+{"timestamp": "2026-04-25T15:04:58.647717", "level": "DEBUG", "name": "CoachDB", "message": "\u23f1\ufe0f get_conn took 0.0000s"}
+{"timestamp": "2026-04-25T15:05:10.093133", "level": "DEBUG", "name": "Main", "message": "Heartbeat \u2014 917975806891 (Connected: True)"}
+{"timestamp": "2026-04-25T15:05:27.108808", "level": "DEBUG", "name": "CoachDB", "message": "\u23f1\ufe0f get_conn took 0.0000s"}
+{"timestamp": "2026-04-25T15:05:44.808576", "level": "DEBUG", "name": "Main", "message": "Heartbeat \u2014 917975806891 (Connected: True)"}
+{"timestamp": "2026-04-25T15:05:58.708452", "level": "DEBUG", "name": "CoachDB", "message": "\u23f1\ufe0f get_conn took 0.0000s"}
+{"timestamp": "2026-04-25T15:06:10.106819", "level": "DEBUG", "name": "Main", "message": "Heartbeat \u2014 917975806891 (Connected: True)"}
+{"timestamp": "2026-04-25T15:06:27.182252", "level": "DEBUG", "name": "CoachDB", "message": "\u23f1\ufe0f get_conn took 0.0000s"}
+{"timestamp": "2026-04-25T15:06:44.813447", "level": "DEBUG", "name": "Main", "message": "Heartbeat \u2014 917975806891 (Connected: True)"}
+{"timestamp": "2026-04-25T15:06:58.749614", "level": "DEBUG", "name": "CoachDB", "message": "\u23f1\ufe0f get_conn took 0.0000s"}
+{"timestamp": "2026-04-25T15:07:10.119758", "level": "DEBUG", "name": "Main", "message": "Heartbeat \u2014 917975806891 (Connected: True)"}
+{"timestamp": "2026-04-25T15:07:27.249340", "level": "DEBUG", "name": "CoachDB", "message": "\u23f1\ufe0f get_conn took 0.0000s"}
+{"timestamp": "2026-04-25T15:07:44.835717", "level": "DEBUG", "name": "Main", "message": "Heartbeat \u2014 917975806891 (Connected: True)"}
