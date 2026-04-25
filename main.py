@@ -30,6 +30,27 @@ async def run_user_bot(phone_number: str):
     
     await scheduler.start()
 
+    # ── Send first batch immediately on first run ─────────────────────────
+    # Check if content has already been sent today. If not, fire right away
+    # so the user doesn't have to wait until the scheduled cron time.
+    try:
+        from app.database.db import get_conn
+        import datetime
+        today = datetime.date.today().isoformat()
+        with get_conn() as conn:
+            row = conn.execute(
+                "SELECT COUNT(*) AS cnt FROM performance_scores "
+                "WHERE phone_number = %s AND answered_at >= %s",
+                (phone_number, today)
+            ).fetchone()
+        already_delivered = (row["cnt"] > 0) if row else False
+        if not already_delivered:
+            logger.info(f"[{phone_number}] First run detected — sending immediate content delivery.")
+            await asyncio.sleep(5)  # brief pause to let WhatsApp settle
+            await scheduler.daily_task()
+    except Exception as e:
+        logger.error(f"[{phone_number}] Immediate delivery error: {e}")
+
     # Monitor connection and keep the task alive
     while True:
         await asyncio.sleep(60)
@@ -40,6 +61,7 @@ async def run_user_bot(phone_number: str):
                 await whatsapp.connect()
             except Exception as e:
                 logger.error(f"❌ [{phone_number}] Reconnect failed: {e}")
+
 
 async def main():
     """System entry point — orchestration of paired users."""

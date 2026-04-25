@@ -172,7 +172,7 @@ class TestHandleIncoming:
     def _build_fake_message(self, phone: str, text: str):
         """Build a fake neonize MessageEv-like object."""
         msg = MagicMock()
-        msg.Info.MessageSource.IsFromMe = True
+        msg.Info.MessageSource.IsFromMe = False
         chat_mock = MagicMock()
         chat_mock.User = phone
         msg.Info.MessageSource.Chat = chat_mock

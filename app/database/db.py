@@ -79,17 +79,6 @@ CREATE TABLE IF NOT EXISTS user_status (
 );
 """
 
-_CREATE_LLM_CACHE = """
-CREATE TABLE IF NOT EXISTS llm_cache (
-    prompt_hash     TEXT PRIMARY KEY,
-    provider        TEXT NOT NULL,
-    model           TEXT NOT NULL,
-    prompt_text     TEXT,
-    response_text   TEXT NOT NULL,
-    created_at      TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-);
-"""
-
 
 # ── Connection wrapper ──────────────────────────────────────────────────────────
 
@@ -137,7 +126,6 @@ def init_db() -> None:
         conn.execute(_CREATE_USER_CONFIGS)
         conn.execute(_CREATE_USER_HISTORY)
         conn.execute(_CREATE_USER_STATUS)
-        conn.execute(_CREATE_LLM_CACHE)
         conn.execute("ALTER TABLE user_configs ADD COLUMN IF NOT EXISTS skill_profile JSONB NOT NULL DEFAULT '{\"backend\": 5, \"system_design\": 5, \"ai\": 5}'")
         conn.execute("ALTER TABLE user_configs ADD COLUMN IF NOT EXISTS level TEXT DEFAULT 'Beginner'")
         conn.execute("ALTER TABLE user_configs ADD COLUMN IF NOT EXISTS name TEXT DEFAULT ''")

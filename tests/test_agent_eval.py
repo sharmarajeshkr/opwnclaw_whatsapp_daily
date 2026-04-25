@@ -191,27 +191,27 @@ class TestGetDeepDiveWithQuestion:
         return asyncio.run(coro)
 
     def test_returns_tuple_of_two_strings(self):
-        response = "[QUESTION]\nWhat is Kafka?\n[/QUESTION]\n[ANSWER]\nKafka is a distributed log.\n[/ANSWER]"
+        response = '{"question": "What is Kafka?", "full_message": "Kafka is a distributed log."}'
         agent = make_deep_dive_agent(response)
         result = self.run(agent.get_deep_dive_with_question("Kafka", "Beginner", 1, {}))
         assert isinstance(result, tuple)
         assert len(result) == 2
 
     def test_first_element_is_question(self):
-        response = "[QUESTION]\nExplain consumer groups.\n[/QUESTION]\n[ANSWER]\nLong answer.\n[/ANSWER]"
+        response = '{"question": "Explain consumer groups.", "full_message": "Long answer."}'
         agent = make_deep_dive_agent(response)
         question, _ = self.run(agent.get_deep_dive_with_question("Kafka", "Beginner", 1, {}))
         assert "consumer groups" in question.lower()
 
     def test_second_element_contains_both_parts(self):
-        response = "[QUESTION]\nQuestion here.\n[/QUESTION]\n[ANSWER]\nAnswer here.\n[/ANSWER]"
+        response = '{"question": "Question here.", "full_message": "Answer here with Question here."}'
         agent = make_deep_dive_agent(response)
         _, full_msg = self.run(agent.get_deep_dive_with_question("Kafka", "Beginner", 1, {}))
         assert "Question here" in full_msg
         assert "Answer here" in full_msg
 
     def test_fallback_when_no_markers(self):
-        """If LLM doesn't use markers, it should not crash."""
+        """If LLM doesn't output JSON, it should not crash."""
         response = "This is an unstructured response without any markers."
         agent = make_deep_dive_agent(response)
         question, full_msg = self.run(agent.get_deep_dive_with_question("Kafka", "Beginner", 1, {}))
@@ -220,7 +220,7 @@ class TestGetDeepDiveWithQuestion:
         assert isinstance(full_msg, str)
 
     def test_history_called(self):
-        response = "[QUESTION]\nQ?\n[/QUESTION]\n[ANSWER]\nA.\n[/ANSWER]"
+        response = '{"question": "Q?", "full_message": "A."}'
         agent = make_deep_dive_agent(response)
         self.run(agent.get_deep_dive_with_question("Kafka", "Beginner", 1, {}))
         agent.history.add_to_history.assert_called_once()

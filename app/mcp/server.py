@@ -36,7 +36,11 @@ def get_medium_posts(query: str, is_user: bool = False, limit: int = 5) -> str:
     
     for idx, entry in enumerate(parsed_feed.entries[:limit]):
         title = entry.get('title', 'Unknown Title')
-        link = entry.get('link', 'No Link')
+        original_link = entry.get('link', 'No Link')
+        
+        # Prepend Freedium (Medium Unlock) proxy to bypass paywalls
+        link = f"https://freedium.cfd/{original_link}" if "medium.com" in original_link else original_link
+        
         published = entry.get('published', 'Unknown Date')
         results.append(f"{idx + 1}. {title}\n   Published: {published}\n   Link: {link}\n")
         

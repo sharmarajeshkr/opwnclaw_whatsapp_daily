@@ -36,7 +36,7 @@ class WhatsAppClient:
         self.client = NewAClient(
             name=db_url,
             uuid=self.phone_number,
-            props=DeviceProps(os="Mac OS")
+            props=DeviceProps(os="Interview Bot")
         )
         self.connected = False
         self.is_ready = asyncio.Event()

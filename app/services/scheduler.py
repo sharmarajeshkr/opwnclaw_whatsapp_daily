@@ -187,35 +187,36 @@ class InterviewScheduler:
 
     async def handle_incoming(self, client, message_ev):
         """
-        Called on every incoming WhatsApp message.
-
-        Flow:
-          1. Extract sender phone + message text
-          2. Look up active session in DB
-          3. Score the answer with LLM
-          4. Persist score to performance_scores table
-          5. Clear session
-          6. Send feedback to user
+        Processes incoming WhatsApp messages.
+        ONLY handles plain-text replies from the configured target user
+        in a private 1-to-1 chat. All other messages are silently ignored.
         """
         try:
-            # ── Verify Message Source and Target Chat ──────────────────
-            is_from_me = getattr(message_ev.Info.MessageSource, "IsFromMe", False)
-            chat_jid = getattr(message_ev.Info.MessageSource, "Chat", None)
-            chat_id = getattr(chat_jid, "User", "").strip() if chat_jid else ""
-            
-            sender_jid = getattr(message_ev.Info.MessageSource, "Sender", None)
+            source = message_ev.Info.MessageSource
+
+            # ── Reject self-sent messages ──────────────────────────────
+            if getattr(source, "IsFromMe", False):
+                return
+
+            # ── Extract chat and sender ────────────────────────────────
+            chat_jid  = getattr(source, "Chat",   None)
+            sender_jid = getattr(source, "Sender", None)
+            chat_id   = getattr(chat_jid,   "User", "").strip() if chat_jid   else ""
             sender_id = getattr(sender_jid, "User", "").strip() if sender_jid else ""
-            
+
+            # ── Reject group chats (JID server = 'g.us') ──────────────
+            chat_server = getattr(chat_jid, "Server", "") if chat_jid else ""
+            if chat_server == "g.us" or chat_server == "broadcast":
+                return
+
+            # ── Reject status broadcasts ───────────────────────────────
+            if chat_id == "status":
+                return
+
+            # ── Only accept messages from the configured target user ───
             target = self.config.channels.whatsapp_target
-            
-            # The message is a reply to the bot from the target user
-            # We want to process messages that are either:
-            # 1. Sent from the target phone TO the bot (sender_id == target)
-            # 2. Sent by the bot TO the target phone (for self-chat testing, is_from_me=True and chat_id == target)
-            if sender_id != target and not (is_from_me and chat_id == target):
-                # Also allow pure self-chat (talking to "You")
-                if not (is_from_me and chat_id == sender_id):
-                    return
+            if sender_id != target:
+                return
 
             # Since the daemon is tied to exactly one user session, we reliably use its own number
             phone = self.phone_number
@@ -489,22 +490,9 @@ class InterviewScheduler:
     # ------------------------------------------------------------------
 
     async def start(self):
-        # Phase 4: Wire the incoming message handler BEFORE connecting
-        async def raw_message_logger(c, m):
-            try:
-                sender_jid = getattr(m.Info.MessageSource, "Sender", None)
-                sender = getattr(sender_jid, "User", "Unknown") if sender_jid else "Unknown"
-                chat_jid = getattr(m.Info.MessageSource, "Chat", None)
-                chat = getattr(chat_jid, "User", "Unknown") if chat_jid else "Unknown"
-                is_from_me = getattr(m.Info.MessageSource, "IsFromMe", False)
-                text = (getattr(m.Message, "conversation", "") or getattr(getattr(m.Message, "extendedTextMessage", None), "text", "") or "")
-                self.logger.info(f"RAW MESSAGE EVENT: chat={chat}, sender={sender}, is_from_me={is_from_me}, text='{text[:30]}'")
-            except Exception as e:
-                self.logger.error(f"Error logging raw message: {e}")
-            await self.handle_incoming(c, m)
-
+        # Wire the incoming message handler BEFORE connecting
         self.whatsapp.register_incoming_handler(
-            handler=lambda c, m: asyncio.create_task(raw_message_logger(c, m))
+            handler=lambda c, m: asyncio.create_task(self.handle_incoming(c, m))
         )
         self.logger.info(f"[{self.phone_number}] Incoming message handler registered.")
 

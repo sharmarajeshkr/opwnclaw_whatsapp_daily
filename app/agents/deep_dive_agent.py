@@ -32,17 +32,21 @@ class DeepDiveAgent:
         
         response = await self.llm.generate_response(prompt)
         
-        # Robust extraction
-        question = extract_block(response, "QUESTION")
-        answer = extract_block(response, "ANSWER")
+        # Robustly extract JSON from the LLM response
+        import re
+        import json
+        question = "What are your thoughts on this?"
+        full_content = response # Fallback
         
-        # Fallback: if markers not found, treat first line as question and full as content
-        if not question or not answer:
-            logger.warning(f"[{topic}] Deep-dive markers not found — using fallback slicing.")
-            question = response.split('\n', 1)[0].strip()
-            full_content = response.strip()
-        else:
-            full_content = f"*Question:*\n{question}\n\n*Answer:*\n{answer}"
+        try:
+            cleaned = re.sub(r'```[\w]*', '', response).strip()
+            json_match = re.search(r'\{.*\}', cleaned, re.DOTALL)
+            if json_match:
+                data = json.loads(json_match.group())
+                question = data.get("question", question)
+                full_content = data.get("full_message", response)
+        except Exception as exc:
+            logger.warning(f"Could not parse deep dive JSON for {self.phone_number}: {exc}. Sending raw response.")
         
         self.history.add_to_history(f"deep_dive:{topic}", question[:200])
         return question.strip(), full_content

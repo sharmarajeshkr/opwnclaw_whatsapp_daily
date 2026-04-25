@@ -3,6 +3,8 @@ app/agents/interview_agent.py
 ----------------------------
 Specialized agent for generating daily system design and architecture challenges.
 """
+import re
+import json
 from app.llm.provider import LLMProvider
 from app.database.history import UserHistoryManager
 from app.core.logging import get_logger
@@ -23,19 +25,26 @@ class InterviewAgent:
             f"You are a Senior System Design Interviewer. Generate a daily architectural 'Challenge of the Day' for a {level} level student "
             f"in Week {week} of their program. Their skill profile is: {skill_profile}.\n\n"
             f"Previously sent topics (avoid these): {history[-5:]}.\n\n"
-            "The output must be a JSON object with two fields:\n"
-            "1. 'text': A detailed challenge description for WhatsApp (use markdown, emojis, bolding).\n"
-            "2. 'image_prompt': A DALL-E prompt to generate a helpful architecture diagram for this challenge.\n\n"
-            "Make it engaging, professional, and practical."
+            "The output must be a valid JSON object with exactly two fields:\n"
+            "1. 'text': A detailed challenge description for WhatsApp (use emojis and bold with *asterisks*, not markdown #headers).\n"
+            "2. 'programing question from Leet.code for easy leavl, medium and hard leavl and  '\n"
+            "Respond with ONLY the JSON object, no extra text or code fences."
         )
         
-        # In a real implementation, we'd use json.loads. 
-        # For brevity in this refactor, we assume the LLM returns the text directly or we wrap it.
-        # Following the existing pattern:
         response = await self.llm.generate_response(prompt)
-        # Simplified extraction logic for this migration
-        detailed_text = response # Placeholder for actual JSON parsing
-        image_prompt = f"Technical architecture diagram for {level} system design"
+        
+        # Robustly extract JSON from the LLM response
+        detailed_text = response  # fallback: send raw if parsing fails
+        programing_question = f"Technical architecture diagram for {level} system design"
+        try:
+            cleaned = re.sub(r'```[\w]*', '', response).strip()
+            json_match = re.search(r'\{.*\}', cleaned, re.DOTALL)
+            if json_match:
+                data = json.loads(json_match.group())
+                detailed_text = data.get("text", response)
+                programing_question = data.get("programing question from Leet.code for easy leavl, medium and hard leavl and  ", programing_question)
+        except Exception as exc:
+            logger.warning(f"Could not parse challenge JSON for {self.phone_number}: {exc}. Sending raw response.")
         
         self.history.add_to_history("architecture_challenge", detailed_text[:50])
-        return detailed_text, image_prompt
+        return detailed_text, programing_question
