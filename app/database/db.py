@@ -45,6 +45,7 @@ CREATE TABLE IF NOT EXISTS performance_scores (
 _CREATE_USER_CONFIGS = """
 CREATE TABLE IF NOT EXISTS user_configs (
     phone_number    TEXT PRIMARY KEY,
+    name            TEXT DEFAULT '',
     schedule_time   TEXT DEFAULT '20:00',
     timezone        TEXT DEFAULT 'Asia/Kolkata',
     pin_code        TEXT DEFAULT '0000',
@@ -139,6 +140,7 @@ def init_db() -> None:
         conn.execute(_CREATE_LLM_CACHE)
         conn.execute("ALTER TABLE user_configs ADD COLUMN IF NOT EXISTS skill_profile JSONB NOT NULL DEFAULT '{\"backend\": 5, \"system_design\": 5, \"ai\": 5}'")
         conn.execute("ALTER TABLE user_configs ADD COLUMN IF NOT EXISTS level TEXT DEFAULT 'Beginner'")
+        conn.execute("ALTER TABLE user_configs ADD COLUMN IF NOT EXISTS name TEXT DEFAULT ''")
         conn.execute("ALTER TABLE sessions ADD COLUMN IF NOT EXISTS follow_up_count INTEGER DEFAULT 0")
         conn.execute("ALTER TABLE user_status ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE")
         conn.execute("ALTER TABLE user_status ADD COLUMN IF NOT EXISTS current_streak INTEGER DEFAULT 0")

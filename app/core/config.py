@@ -69,6 +69,7 @@ class ChannelsConfig(BaseModel):
     slack_webhook_url: str = ""
 
 class UserConfig(BaseModel):
+    name: str = ""                 # display name entered at registration
     schedule_time: str = "20:00"   # global fallback if a topic has no individual time
     timezone: str = "Asia/Kolkata"
     pin_code: str = "0000"
@@ -133,6 +134,7 @@ class ConfigManager:
                 return config
             
             data = {
+                "name": row.get("name", ""),
                 "schedule_time": row["schedule_time"],
                 "timezone": row["timezone"],
                 "pin_code": row["pin_code"],
@@ -166,9 +168,10 @@ class ConfigManager:
         with get_conn() as conn:
             conn.execute(
                 """
-                INSERT INTO user_configs (phone_number, schedule_time, timezone, pin_code, topics, channels, level, skill_profile, updated_at)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP)
+                INSERT INTO user_configs (phone_number, name, schedule_time, timezone, pin_code, topics, channels, level, skill_profile, updated_at)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP)
                 ON CONFLICT (phone_number) DO UPDATE SET
+                    name          = EXCLUDED.name,
                     schedule_time = EXCLUDED.schedule_time,
                     timezone      = EXCLUDED.timezone,
                     pin_code      = EXCLUDED.pin_code,
@@ -180,6 +183,7 @@ class ConfigManager:
                 """,
                 (
                     phone_number,
+                    data.get("name", ""),
                     data.get("schedule_time"),
                     data.get("timezone"),
                     data.get("pin_code"),

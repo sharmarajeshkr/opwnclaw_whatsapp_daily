@@ -207,47 +207,64 @@ if not st.session_state.authenticated:
                     
     with tab_register:
         st.subheader("Join Interview")
+        reg_name = st.text_input("Your Name", placeholder="e.g. Rajesh Sharma")
         reg_phone = st.text_input("Your Mobile Number (with country code)", placeholder="e.g. +919876543210")
         reg_pin = st.text_input("Set a 4-Digit PIN", type="password", max_chars=4)
         
         if st.button("Create Account", type="primary", use_container_width=True):
             phone_clean = reg_phone.strip().lstrip("+")
-            if not phone_clean.isdigit():
+            if not reg_name.strip():
+                st.error("Please enter your name.")
+            elif not phone_clean.isdigit():
                 st.error("Please enter a valid phone number with country code.")
             elif not reg_pin:
                 st.error("Please set a PIN.")
-            active_users = ConfigManager.get_all_users()
-            if phone_clean in active_users:
-                st.warning("This phone number is already registered! Please login.")
             else:
-                # Check if it's a reactivation (exists in user_status but is_active=False)
-                from app.database.db import get_conn
-                with get_conn() as conn:
-                    status_row = conn.execute("SELECT is_active FROM user_status WHERE phone_number = %s", (phone_clean,)).fetchone()
-                
-                if status_row and not status_row["is_active"]:
-                    # Reactivate existing account
-                    with get_conn() as conn:
-                        conn.execute("UPDATE user_status SET is_active = TRUE WHERE phone_number = %s", (phone_clean,))
-                    # Also update PIN to the new one provided
-                    cfg = ConfigManager.load_config(phone_clean)
-                    cfg.pin_code = reg_pin
-                    ConfigManager.save_config(phone_clean, cfg)
-                    st.success(f"Welcome back! Your account for +{phone_clean} has been reactivated. You can now login.")
+                active_users = ConfigManager.get_all_users()
+                if phone_clean in active_users:
+                    st.warning("This phone number is already registered! Please login.")
                 else:
-                    # Create default config for the new user
-                    from app.core.config import UserConfig, ChannelsConfig
-                    default_channels = ChannelsConfig(whatsapp_target=phone_clean)
-                    new_cfg = UserConfig(channels=default_channels, pin_code=reg_pin)
-                    ConfigManager.save_config(phone_clean, new_cfg)
-                    # Initialize status entry for new user
+                    # Check if it's a reactivation (exists in user_status but is_active=False)
+                    from app.database.db import get_conn
                     with get_conn() as conn:
-                        conn.execute(
-                            "INSERT INTO user_status (phone_number, is_active) VALUES (%s, TRUE) "
-                            "ON CONFLICT (phone_number) DO UPDATE SET is_active = TRUE",
-                            (phone_clean,)
-                        )
-                    st.success(f"Account for +{phone_clean} created successfully! You can now login.")
+                        status_row = conn.execute("SELECT is_active FROM user_status WHERE phone_number = %s", (phone_clean,)).fetchone()
+                    
+                    if status_row and not status_row["is_active"]:
+                        # Reactivate existing account
+                        with get_conn() as conn:
+                            conn.execute("UPDATE user_status SET is_active = TRUE WHERE phone_number = %s", (phone_clean,))
+                        # Also update name and PIN to the new ones provided
+                        cfg = ConfigManager.load_config(phone_clean)
+                        cfg.pin_code = reg_pin
+                        cfg.name = reg_name.strip()
+                        ConfigManager.save_config(phone_clean, cfg)
+                        # Auto-login and redirect to QR pairing screen
+                        st.session_state.authenticated = True
+                        st.session_state.role = "USER"
+                        st.session_state.auth_user = phone_clean
+                        trigger_qr_script(phone_clean)
+                        time.sleep(2)
+                        st.rerun()
+                    else:
+                        # Create default config for the new user
+                        from app.core.config import UserConfig, ChannelsConfig
+                        default_channels = ChannelsConfig(whatsapp_target=phone_clean)
+                        new_cfg = UserConfig(name=reg_name.strip(), channels=default_channels, pin_code=reg_pin)
+                        ConfigManager.save_config(phone_clean, new_cfg)
+                        # Initialize status entry for new user
+                        with get_conn() as conn:
+                            conn.execute(
+                                "INSERT INTO user_status (phone_number, is_active) VALUES (%s, TRUE) "
+                                "ON CONFLICT (phone_number) DO UPDATE SET is_active = TRUE",
+                                (phone_clean,)
+                            )
+                        # Auto-login and trigger QR immediately
+                        st.session_state.authenticated = True
+                        st.session_state.role = "USER"
+                        st.session_state.auth_user = phone_clean
+                        trigger_qr_script(phone_clean)
+                        time.sleep(2)
+                        st.rerun()
                 
     st.markdown('</div>', unsafe_allow_html=True)
     st.stop()
@@ -255,13 +272,17 @@ if not st.session_state.authenticated:
 st.sidebar.markdown(f"**Logged in as:** {st.session_state.role}")
 if st.session_state.role == "USER":
     user_phone = st.session_state.auth_user
-    # Fetch streak for display
+    # Fetch name and streak for display
     from app.database.db import get_conn
     with get_conn() as conn:
         row = conn.execute("SELECT current_streak FROM user_status WHERE phone_number = %s", (user_phone,)).fetchone()
         streak = row["current_streak"] if row else 0
-    
-    st.sidebar.markdown(f"**Profile:** +{user_phone}")
+    user_cfg = ConfigManager.load_config(user_phone)
+    display_name = user_cfg.name.strip() if user_cfg.name.strip() else None
+    if display_name:
+        st.sidebar.markdown(f"**{display_name}_{user_phone}**")
+    else:
+        st.sidebar.markdown(f"**Profile:** +{user_phone}")
     if (streak or 0) > 0:
         st.sidebar.markdown(f"🔥 **{streak} Day Streak**")
 if st.sidebar.button("Logout"):
@@ -305,12 +326,15 @@ if st.session_state.role == "USER":
             time.sleep(5)
             st.rerun()
         else:
-            st.info("Click the button below to generate your personal QR code.")
-            if st.button("🔲 Generate My QR Code", type="primary", use_container_width=True):
+            # QR is still being generated — auto-refresh every 3 s with a spinner
+            with st.spinner("⏳ Generating your QR code… please wait."):
+                import time
+                time.sleep(3)
+            if st.button("🔲 Retry / Generate QR Code", use_container_width=True):
                 trigger_qr_script(user_phone)
                 import time
                 time.sleep(3)
-                st.rerun()
+            st.rerun()
 
         st.markdown('</div>', unsafe_allow_html=True)
         st.stop()
@@ -646,10 +670,10 @@ if tab_config is not None:
 
                 TOPIC_DEFS = [
                     ("1", "🏗️ Architecture Challenge"),
-                    ("2", "🔬 Deep Dive 1"),
-                    ("3", "🔬 Deep Dive 2"),
-                    ("4", "📰 Fresh Updates"),
-                    ("5", "📖 Medium Articles"),
+                    ("2", "🔬 Backend interview quiestion and Answers topics wise"),
+                    ("3", "🔬 Frontend ReactJS interview quiestion and Answers topics wise"),
+                    ("4", "📰 ML and Agentic-AI topics wise detailed explanation"),
+                    ("5", "📰 Article from Medium.com "),
                 ]
                 topic_values = {}
                 for n, label in TOPIC_DEFS:
