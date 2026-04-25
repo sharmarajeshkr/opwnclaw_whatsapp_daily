@@ -54,37 +54,42 @@ async def main():
     logger.info("      Interview Multi-User Bot Daemon         ")
     logger.info("=============================================")
 
-    # Security check: Ensure LLM keys are present
-    if not settings.OPENAI_API_KEY and not settings.GEMINI_API_KEY:
-        logger.error("FATAL: No LLM API keys found in environment (OPENAI_API_KEY or GEMINI_API_KEY).")
-        sys.exit(1)
-
     if args.phone:
-        # Single user mode (often used for debugging or manual starts)
+        # SINGLE USER MODE: Run bot directly in this process
         phone = args.phone.strip().lstrip("+")
         await run_user_bot(phone)
     else:
-        # Multi-user mode (default)
-        logger.info("Scanning for paired users...")
+        # MULTI-USER DAEMON MODE: Manage per-user subprocesses
+        from app.core.utils import start_bot, is_bot_running
+        logger.info("🚀 System started in Daemon Mode. Monitoring users...")
+        
         while True:
-            all_users = ConfigManager.get_all_users()
-            paired_users = [u for u in all_users if is_user_paired(u)]
-            
-            if not paired_users:
-                logger.info("⏳ No paired users found. Polling every 30s...")
+            try:
+                all_users = ConfigManager.get_all_users()
+                paired_users = [u for u in all_users if is_user_paired(u)]
+                
+                for phone in paired_users:
+                    if not is_bot_running(phone):
+                        logger.info(f"🆕 New/Idle paired user found: {phone}. Launching isolation process...")
+                        start_bot(phone)
+                        # Small stagger to prevent DB connection spikes
+                        await asyncio.sleep(2)
+                
+                # Poll for new users every 30 seconds
                 await asyncio.sleep(30)
-            else:
-                logger.info(f"✅ Found {len(paired_users)} paired users: {paired_users}")
+            except KeyboardInterrupt:
                 break
+            except Exception as e:
+                logger.error(f"Daemon management error: {e}")
+                await asyncio.sleep(10)
 
-        # Launch concurrent bot tasks
-        tasks = [asyncio.create_task(run_user_bot(phone)) for phone in paired_users]
-        logger.info(f"🚀 {len(tasks)} user bots are now active.")
-
-        try:
-            await asyncio.gather(*tasks)
-        except KeyboardInterrupt:
-            logger.info("Shutdown signal received.")
+if __name__ == "__main__":
+    try:
+        if sys.platform == "win32":
+            asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        logger.info("Shutdown signal received. Stopping daemon.")
 
 if __name__ == "__main__":
     try:

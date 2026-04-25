@@ -22,7 +22,8 @@ class NewsAgent:
             f"You are a Tech News Curator. Source category: {source}.\n"
             f"Instruction: {instruction}\n\n"
             "Rewrite the content into a friendly, structured WhatsApp reading list. "
-            "Include exact links if provided. Use markdown and formatting for readability."
+            "Include exact links if provided. Use markdown and formatting for readability.\n"
+            "CRITICAL: Do NOT hallucinate links. Never use example.com. If no real link is provided in the source data, DO NOT add one."
         )
         
         content = await self.llm.generate_response(prompt)

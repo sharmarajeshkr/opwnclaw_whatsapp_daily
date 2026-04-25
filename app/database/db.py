@@ -24,7 +24,7 @@ CREATE TABLE IF NOT EXISTS sessions (
     phone_number    TEXT NOT NULL,
     question        TEXT NOT NULL,
     topic           TEXT NOT NULL,
-    sent_at         TEXT NOT NULL,
+    sent_at         TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     awaiting_reply  INTEGER DEFAULT 1,
     follow_up_count INTEGER DEFAULT 0
 );
@@ -38,7 +38,8 @@ CREATE TABLE IF NOT EXISTS performance_scores (
     score           INTEGER NOT NULL,
     weak_aspects    TEXT,
     feedback        TEXT,
-    answered_at     TEXT NOT NULL
+    question_text   TEXT,
+    answered_at     TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 """
 
@@ -86,6 +87,16 @@ CREATE TABLE IF NOT EXISTS llm_cache (
     prompt_text     TEXT,
     response_text   TEXT NOT NULL,
     created_at      TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+"""
+
+_CREATE_USER_INSIGHTS = """
+CREATE TABLE IF NOT EXISTS user_insights (
+    phone_number    TEXT NOT NULL,
+    week_id         TEXT NOT NULL,
+    insight_text    TEXT NOT NULL,
+    created_at      TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (phone_number, week_id)
 );
 """
 
@@ -143,6 +154,33 @@ def init_db() -> None:
         conn.execute("ALTER TABLE user_status ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE")
         conn.execute("ALTER TABLE user_status ADD COLUMN IF NOT EXISTS current_streak INTEGER DEFAULT 0")
         conn.execute("ALTER TABLE user_status ADD COLUMN IF NOT EXISTS last_reply_at TIMESTAMP WITH TIME ZONE")
+        
+        # ── Migration: Convert sent_at from TEXT to TIMESTAMP ────────
+        try:
+            # Check if sent_at is still TEXT
+            res = conn.execute(
+                "SELECT data_type FROM information_schema.columns "
+                "WHERE table_name = 'sessions' AND column_name = 'sent_at'"
+            ).fetchone()
+            if res and res["data_type"] == "text":
+                logger.info("Migrating sessions.sent_at from TEXT to TIMESTAMP...")
+                conn.execute(
+                    "ALTER TABLE sessions ALTER COLUMN sent_at "
+                    "TYPE TIMESTAMP WITH TIME ZONE USING sent_at::TIMESTAMP WITH TIME ZONE"
+                )
+                conn.execute("ALTER TABLE sessions ALTER COLUMN sent_at SET DEFAULT CURRENT_TIMESTAMP")
+        except Exception as e:
+            logger.warning(f"Session timestamp migration skipped/failed: {e}")
+
+        conn.execute("ALTER TABLE performance_scores ADD COLUMN IF NOT EXISTS question_text TEXT")
+        conn.execute(
+            "ALTER TABLE performance_scores ALTER COLUMN answered_at "
+            "TYPE TIMESTAMP WITH TIME ZONE USING answered_at::TIMESTAMP WITH TIME ZONE"
+        )
+        conn.execute("ALTER TABLE performance_scores ALTER COLUMN answered_at SET DEFAULT CURRENT_TIMESTAMP")
+        
+        conn.execute(_CREATE_USER_INSIGHTS)
+
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_sessions_phone_reply "
             "ON sessions(phone_number, awaiting_reply)"

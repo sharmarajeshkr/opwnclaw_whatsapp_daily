@@ -130,6 +130,32 @@ class TestGetActiveSession:
         result = SessionManager.get_active_session(PHONE)
         assert result is None
 
+class TestGetActiveSessionWithContext:
+    def test_lifo_fallback_unquoted(self, isolated_db):
+        """Without a quote, should return the MOST RECENT session (LIFO)."""
+        from app.services.session_manager import SessionManager
+        SessionManager.set_active_question(PHONE, "Old Question", "Old")
+        SessionManager.set_active_question(PHONE, "New Question", "New")
+        
+        session = SessionManager.get_active_session(PHONE)
+        assert session["topic"] == "New"
+
+    def test_quote_matching_disambiguation(self, isolated_db):
+        """With a quote, should return the matching historical session even if it isn't latest."""
+        from app.services.session_manager import SessionManager
+        SessionManager.set_active_question(PHONE, "Kafka configuration details?", "Kafka")
+        SessionManager.set_active_question(PHONE, "Redis cache eviction?", "Redis")
+        
+        # User replies quoting/replying to the Kafka message
+        session = SessionManager.get_active_session(PHONE, match_text="Kafka")
+        assert session["topic"] == "Kafka"
+
+    def test_quote_match_by_topic(self, isolated_db):
+        from app.services.session_manager import SessionManager
+        SessionManager.set_active_question(PHONE, "Explain DLQ", "Kafka_Ops")
+        session = SessionManager.get_active_session(PHONE, match_text="Kafka_Ops")
+        assert session["topic"] == "Kafka_Ops"
+
 
 # ── clear_session ──────────────────────────────────────────────────────────────
 
@@ -154,22 +180,39 @@ class TestClearSession:
 
 # ── clear_all_stale ────────────────────────────────────────────────────────────
 
-class TestClearAllStale:
-    def test_clears_pending_session(self, isolated_db):
+class TestPruneExpiredSessions:
+    def test_prunes_old_session(self, isolated_db):
         from app.services.session_manager import SessionManager
-        SessionManager.set_active_question(PHONE, QUESTION, TOPIC)
-        SessionManager.clear_all_stale(PHONE)
+        from app.database.db import get_conn
+        
+        # Insert a manually aged session (8 days old)
+        with get_conn() as conn:
+            conn.execute(
+                "INSERT INTO sessions (phone_number, question, topic, sent_at, awaiting_reply) "
+                "VALUES (%s, %s, %s, NOW() - INTERVAL '8 days', 1)",
+                (PHONE, "Old Q", "Old")
+            )
+        
+        SessionManager.prune_expired_sessions(PHONE, days=7)
         result = SessionManager.get_active_session(PHONE)
         assert result is None
 
-    def test_does_not_affect_other_phone(self, isolated_db):
-        """Clearing stale for PHONE must not touch PHONE2's session."""
+    def test_keeps_recent_session(self, isolated_db):
         from app.services.session_manager import SessionManager
-        SessionManager.set_active_question(PHONE, QUESTION, TOPIC)
-        SessionManager.set_active_question(PHONE2, "Q2", "Redis")
-        SessionManager.clear_all_stale(PHONE)
-        result = SessionManager.get_active_session(PHONE2)
+        from app.database.db import get_conn
+        
+        # Insert a 2-day old session
+        with get_conn() as conn:
+            conn.execute(
+                "INSERT INTO sessions (phone_number, question, topic, sent_at, awaiting_reply) "
+                "VALUES (%s, %s, %s, NOW() - INTERVAL '2 days', 1)",
+                (PHONE, "Recent Q", "Recent")
+            )
+        
+        SessionManager.prune_expired_sessions(PHONE, days=7)
+        result = SessionManager.get_active_session(PHONE)
         assert result is not None
+        assert result["topic"] == "Recent"
 
 
 # ── Multi-user isolation ───────────────────────────────────────────────────────

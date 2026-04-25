@@ -130,8 +130,7 @@ section[data-testid="stSidebarCollapsedControl"] {
 """, unsafe_allow_html=True)
 
 # ── Hide sidebar collapse arrow (JS targets the Streamlit host frame) ─────────
-import streamlit.components.v1 as _components
-_components.html("""
+st.iframe("""
 <script>
 (function hideSidebarArrow() {
     function remove() {
@@ -155,7 +154,7 @@ _components.html("""
     setTimeout(remove, 1500);
 })();
 </script>
-""", height=0)
+""", height=1)
 
 # ── Header ───────────────────────────────────────────────────────────────────
 st.markdown('<p class="hero-title">🦀 Interview Bot Dashboard</p>', unsafe_allow_html=True)

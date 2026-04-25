@@ -232,6 +232,15 @@ def get_performance(phone: str):
         "weak_topics": PerformanceTracker.get_weak_topics(phone),
     }
 
+@router.get("/api/users/{phone}/weekly-insight", tags=["Performance"])
+def get_weekly_insight(phone: str):
+    phone = _clean_phone(phone)
+    _require_user(phone)
+    insight = PerformanceTracker.get_latest_insight(phone)
+    if not insight:
+        return {"insight": "No insight generated yet. Keep practicing!"}
+    return insight
+
 # ── System [Admin] ────────────────────────────────────────────────────────────
 
 @router.get("/api/system/leaderboard", tags=["System"])

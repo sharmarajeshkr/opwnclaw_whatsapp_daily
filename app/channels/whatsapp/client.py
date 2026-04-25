@@ -60,6 +60,10 @@ class WhatsAppClient:
         """Register handlers for connection lifecycle."""
         @self.client.event(ConnectedEv)
         async def on_connected(client: NewAClient, event: ConnectedEv):
+            # Identity Guard: Ensure this event belongs to THIS instance
+            if client is not self.client:
+                return
+
             self.logger.info(f"✨ [{self.phone_number}] Connected successfully!")
             self.is_ready.set()
             self.connected = True
@@ -69,9 +73,8 @@ class WhatsAppClient:
             if os.path.exists(qr_file):
                 try:
                     os.remove(qr_file)
-                    self.logger.debug(f"Deleted QR file {qr_file} after successful pairing.")
-                except Exception as e:
-                    self.logger.warning(f"Could not delete QR file {qr_file}: {e}")
+                except Exception:
+                    pass
             
             # Update DB status
             with get_conn() as conn:
@@ -83,23 +86,22 @@ class WhatsAppClient:
 
         @self.client.event(DisconnectedEv)
         async def on_disconnected(client: NewAClient, event: DisconnectedEv):
-            self.logger.warning(f"⚠️ [{self.phone_number}] WhatsApp disconnected. Connection lost.")
+            if client is not self.client:
+                return
+            self.logger.warning(f"⚠️ [{self.phone_number}] WhatsApp disconnected.")
             self.connected = False
             self.is_ready.clear()
 
         @self.client.event(LoggedOutEv)
         async def on_logged_out(client: NewAClient, event: LoggedOutEv):
-            self.logger.error(f"❌ [{self.phone_number}] WhatsApp logged out. QR pairing required again.")
+            if client is not self.client:
+                return
+            self.logger.error(f"❌ [{self.phone_number}] WhatsApp logged out. QR pairing required.")
             self.connected = False
             self.is_ready.clear()
             
-            # Update DB status
             with get_conn() as conn:
-                conn.execute(
-                    "INSERT INTO user_status(phone_number, is_paired, updated_at) VALUES (%s, %s, CURRENT_TIMESTAMP) "
-                    "ON CONFLICT (phone_number) DO UPDATE SET is_paired = FALSE, updated_at = CURRENT_TIMESTAMP",
-                    (self.phone_number, False)
-                )
+                conn.execute("UPDATE user_status SET is_paired = FALSE WHERE phone_number = %s", (self.phone_number,))
 
     async def connect(self, retries: int = 3, timeout: int = 90):
         """Standard connect for NewAClient with robust retry."""
@@ -107,33 +109,27 @@ class WhatsAppClient:
             return
             
         for attempt in range(retries):
-            self.logger.info(f"[{self.phone_number}] Initiating WhatsApp connection (Attempt {attempt+1}/{retries})...")
+            self.logger.info(f"[{self.phone_number}] connection attempt {attempt+1}/{retries}")
             self.is_ready.clear()
             self.connected = False
             
-            # Start the connection task
             connect_task = asyncio.create_task(self.client.connect())
             
-            # Wait for the ConnectedEv or timeout
             try:
-                self.logger.debug(f"[{self.phone_number}] Waiting for connection signal...")
                 await asyncio.wait_for(self.is_ready.wait(), timeout=timeout)
-                self.logger.info(f"✅ [{self.phone_number}] WhatsApp connection ready.")
+                self.logger.info(f"✅ [{self.phone_number}] WhatsApp ready.")
                 return
             except asyncio.TimeoutError:
-                self.logger.error(f"❌ [{self.phone_number}] Timeout waiting for WhatsApp connection.")
+                self.logger.error(f"❌ [{self.phone_number}] Connection timeout.")
                 connect_task.cancel()
                 await asyncio.sleep(5)
                 
-        # If we exhausted all retries
         self.connected = False
-        raise ConnectionError(f"Failed to connect WhatsApp client for +{self.phone_number} after {retries} attempts.")
+        raise ConnectionError(f"Failed to connect +{self.phone_number}")
 
     async def ensure_connected(self):
-        """Check connection state and auto-reconnect if needed before action."""
-        if self.connected and self.is_ready.is_set():
-            return
-        await self.connect()
+        if not (self.connected and self.is_ready.is_set()):
+            await self.connect()
 
     async def send_message(self, text: str, retries: int = 3):
         await self.ensure_connected()
@@ -143,12 +139,12 @@ class WhatsAppClient:
         for attempt in range(retries):
             try:
                 await self.client.send_message(jid, text)
-                self.logger.debug(f"✅ [{self.phone_number}] Message sent to {jid} (Attempt {attempt+1})")
+                self.logger.debug(f"✅ [{self.phone_number}] Message sent.")
                 return
             except Exception as e:
-                self.logger.error(f"Error sending message (Attempt {attempt+1}): {e}")
+                self.logger.error(f"Send error (Attempt {attempt+1}): {e}")
                 if attempt < retries - 1:
-                    await asyncio.sleep(5 * (attempt + 1))  # Exponential backoff
+                    await asyncio.sleep(2 * (attempt + 1))
                 else:
                     raise e
 
@@ -158,7 +154,6 @@ class WhatsAppClient:
         jid = build_jid(self.phone_number)
 
         if not os.path.exists(image_path):
-            self.logger.error(f"Image not found at {image_path}")
             return
 
         with open(image_path, "rb") as f:
@@ -167,22 +162,20 @@ class WhatsAppClient:
         for attempt in range(retries):
             try:
                 await self.client.send_image(jid, image_bytes, caption=caption)
-                self.logger.debug(f"✅ [{self.phone_number}] Image sent successfully (Attempt {attempt+1})")
                 return
             except Exception as e:
-                self.logger.error(f"Error sending image (Attempt {attempt+1}): {e}")
-                if attempt < retries - 1:
-                    await asyncio.sleep(5 * (attempt + 1))
-                else:
-                    raise e
+                if attempt == retries - 1: raise e
+                await asyncio.sleep(2 * (attempt + 1))
 
     def register_incoming_handler(self, handler=None):
-        """Register callback for incoming messages."""
-        if handler:
-             @self.client.event(MessageEv)
-             async def on_message(client: NewAClient, message: MessageEv):
-                 await handler(client, message)
-        else:
-             @self.client.event(MessageEv)
-             async def on_message(client: NewAClient, message: MessageEv):
-                 self.logger.info(f"📩 [{self.phone_number}] Incoming message: {message}")
+        """Register callback for incoming messages with strict account filtering."""
+        @self.client.event(MessageEv)
+        async def on_message(client: NewAClient, message: MessageEv):
+            # Identity Guard: Only process messages meant for THIS client instance
+            if client is not self.client:
+                return
+            
+            if handler:
+                await handler(client, message)
+            else:
+                self.logger.info(f"📩 [{self.phone_number}] Incoming message received.")

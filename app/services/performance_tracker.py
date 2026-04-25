@@ -33,6 +33,7 @@ class PerformanceTracker:
         score: int,
         weak_aspects: list[str],
         feedback: str,
+        question_text: str = None,
     ) -> None:
         """
         Persist a single scored answer to the DB.
@@ -43,16 +44,16 @@ class PerformanceTracker:
             score:         Integer 0–10
             weak_aspects:  List of concept strings the user missed
             feedback:      LLM feedback text (stored for audit / future use)
+            question_text: The original question that was asked
         """
-        now = datetime.now(timezone.utc).isoformat()
         with get_conn() as conn:
             conn.execute(
                 """
                 INSERT INTO performance_scores
-                    (phone_number, topic, score, weak_aspects, feedback, answered_at)
-                VALUES (%s, %s, %s, %s, %s, %s)
+                    (phone_number, topic, score, weak_aspects, feedback, question_text, answered_at)
+                VALUES (%s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP)
                 """,
-                (phone, topic, score, json.dumps(weak_aspects), feedback, now),
+                (phone, topic, score, json.dumps(weak_aspects), feedback, question_text),
             )
         logger.info(f"[{phone}] Score recorded — topic='{topic}' score={score}/10")
 
@@ -206,7 +207,7 @@ class PerformanceTracker:
                     COUNT(*) as weekly_attempts
                 FROM performance_scores p
                 LEFT JOIN user_status s ON p.phone_number = s.phone_number
-                WHERE p.answered_at::timestamptz >= NOW() - INTERVAL '7 days'
+                WHERE p.answered_at >= NOW() - INTERVAL '7 days'
                 GROUP BY p.phone_number, s.current_streak
                 ORDER BY avg_score DESC, weekly_attempts DESC
                 LIMIT %s
@@ -214,3 +215,53 @@ class PerformanceTracker:
                 (limit,)
             ).fetchall()
         return [dict(row) for row in rows]
+
+    @staticmethod
+    def get_weekly_detailed_data(phone: str) -> list[dict]:
+        """
+        Return all scored answers with detailed feedback and questions
+        from the last 7 days.
+        """
+        with get_conn() as conn:
+            rows = conn.execute(
+                """
+                SELECT topic, score, weak_aspects, feedback, question_text, answered_at
+                FROM performance_scores
+                WHERE phone_number = %s
+                  AND answered_at >= NOW() - INTERVAL '7 days'
+                ORDER BY answered_at DESC
+                """,
+                (phone,),
+            ).fetchall()
+        return [dict(row) for row in rows]
+
+    @staticmethod
+    def save_weekly_insight(phone: str, week_id: str, insight_text: str) -> None:
+        """Cache the AI-generated weekly insight in the database."""
+        with get_conn() as conn:
+            conn.execute(
+                """
+                INSERT INTO user_insights (phone_number, week_id, insight_text)
+                VALUES (%s, %s, %s)
+                ON CONFLICT (phone_number, week_id) DO UPDATE 
+                SET insight_text = EXCLUDED.insight_text, created_at = CURRENT_TIMESTAMP
+                """,
+                (phone, week_id, insight_text),
+            )
+        logger.info(f"[{phone}] Weekly insight saved for {week_id}")
+
+    @staticmethod
+    def get_latest_insight(phone: str) -> dict | None:
+        """Fetch the most recent AI insight for a user."""
+        with get_conn() as conn:
+            row = conn.execute(
+                """
+                SELECT week_id, insight_text, created_at
+                FROM user_insights
+                WHERE phone_number = %s
+                ORDER BY created_at DESC
+                LIMIT 1
+                """,
+                (phone,),
+            ).fetchone()
+        return dict(row) if row else None

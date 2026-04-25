@@ -42,6 +42,34 @@ def get_medium_posts(query: str, is_user: bool = False, limit: int = 5) -> str:
         
     return "\n".join(results)
 
+@mcp.tool()
+def get_tech_news(query: str, limit: int = 3) -> str:
+    """
+    Fetches real-time tech news headlines and links from Google News RSS.
+    
+    Args:
+        query: The search term (e.g., 'SAP S/4HANA migration' or 'Python programming').
+        limit: Max number of news items to return.
+    """
+    import urllib.parse
+    encoded_query = urllib.parse.quote(query)
+    feed_url = f"https://news.google.com/rss/search?q={encoded_query}&hl=en-US&gl=US&ceid=US:en"
+    
+    parsed_feed = feedparser.parse(feed_url)
+    
+    if not parsed_feed.entries:
+        return f"No news found for topic: {query}"
+        
+    results = [f"Found {len(parsed_feed.entries)} news items. Showing top {limit}:\n"]
+    
+    for idx, entry in enumerate(parsed_feed.entries[:limit]):
+        title = entry.get('title', 'Unknown Title')
+        link = entry.get('link', 'No Link')
+        # Google News RSS links are often long/redirects, but they are real.
+        results.append(f"{idx + 1}. {title}\n   Link: {link}\n")
+        
+    return "\n".join(results)
+
 # 3. Run the server
 if __name__ == "__main__":
     # By default, mcp.run() uses the stdio transport, perfect for local LLM clients

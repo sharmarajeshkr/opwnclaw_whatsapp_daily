@@ -32,52 +32,65 @@ class SessionManager:
     @staticmethod
     def set_active_question(phone: str, question: str, topic: str) -> None:
         """
-        Enqueue a newly sent question for a user.
-
-        Unlike v1 (INSERT OR REPLACE), this is a plain INSERT that allows
-        multiple questions to be pending simultaneously — e.g. the two
-        deep-dive topics sent in one daily cycle.
-
-        Args:
-            phone:    User's phone number (digits only, no +)
-            question: The exact question text sent to the user
-            topic:    Topic label used later for performance tracking
+        Record a new question sent to a user.
         """
-        now = datetime.now(timezone.utc).isoformat()
         with get_conn() as conn:
             conn.execute(
                 """
-                INSERT INTO sessions
+                INSERT INTO sessions 
                     (phone_number, question, topic, sent_at, awaiting_reply, follow_up_count)
-                VALUES (%s, %s, %s, %s, 1, 0)
+                VALUES (%s, %s, %s, CURRENT_TIMESTAMP, 1, 0)
                 """,
-                (phone, question, topic, now),
+                (phone, question, topic),
             )
         logger.debug(f"[{phone}] Question enqueued — topic='{topic}'")
 
     @staticmethod
-    def get_active_session(phone: str) -> dict | None:
+    def get_active_session(phone: str, match_text: str | None = None) -> dict | None:
         """
-        Return the OLDEST unanswered question for a user (FIFO), or None.
-
+        Return an active question for a user.
+        
+        Args:
+            phone: User's phone number
+            match_text: Optional text from a quoted WhatsApp reply to disambiguate context.
+            
         Returns:
             dict with keys {id, question, topic, sent_at} or None.
-            The `id` field must be passed to clear_session() after scoring.
+            If match_text is provided, tries to find the most relevant historical context.
+            Otherwise, uses LIFO (DESC) to match the most recent thing the user read.
         """
         with get_conn() as conn:
+            if match_text:
+                # 1. Try to find content that matches the quoted text
+                row = conn.execute(
+                    """
+                    SELECT id, question, topic, sent_at, follow_up_count
+                    FROM sessions
+                    WHERE phone_number = %s AND (question ILIKE %s OR topic ILIKE %s)
+                    ORDER BY sent_at DESC
+                    LIMIT 1
+                    """,
+                    (phone, f"%{match_text}%", f"%{match_text}%"),
+                ).fetchone()
+                if row:
+                    logger.debug(f"[{phone}] Context match found via quote: '{row['topic']}'")
+                    return dict(row)
+
+            # 2. Fallback to LIFO (DESC) — match the most recent delivery
             row = conn.execute(
                 """
                 SELECT id, question, topic, sent_at, follow_up_count
                 FROM sessions
                 WHERE phone_number = %s AND awaiting_reply = 1
-                ORDER BY sent_at ASC
+                ORDER BY sent_at DESC
                 LIMIT 1
                 """,
                 (phone,),
             ).fetchone()
+            
         if row:
             logger.debug(
-                f"[{phone}] Active session found — topic='{row['topic']}' id={row['id']}"
+                f"[{phone}] Active session found (LIFO) — topic='{row['topic']}' id={row['id']}"
             )
             return dict(row)
         return None
@@ -118,19 +131,23 @@ class SessionManager:
         logger.info(f"Session id={session_id} updated with follow-up question.")
 
     @staticmethod
-    def clear_all_stale(phone: str) -> None:
+    def prune_expired_sessions(phone: str, days: int = 7) -> None:
         """
-        Force-clear ALL pending questions for a user.
-
-        Called at the start of each daily_task so that unanswered questions
-        from the previous cycle do not linger into the next day's scoring.
+        Mark sessions as inactive (awaiting_reply=0) if they are older than 'days'.
+        This maintains a rolling window of interactive context for the user.
         """
         with get_conn() as conn:
             conn.execute(
-                "UPDATE sessions SET awaiting_reply = 0 WHERE phone_number = %s",
+                f"""
+                UPDATE sessions 
+                SET awaiting_reply = 0 
+                WHERE phone_number = %s 
+                  AND awaiting_reply = 1 
+                  AND sent_at < NOW() - INTERVAL '{days} days'
+                """,
                 (phone,),
             )
-        logger.debug(f"[{phone}] All stale sessions cleared before new daily cycle.")
+        logger.info(f"[{phone}] Pruned sessions older than {days} days.")
 
     @staticmethod
     def pending_count(phone: str) -> int:

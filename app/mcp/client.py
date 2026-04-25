@@ -12,48 +12,22 @@ import os
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 
-async def run_medium_query(query: str, is_user: bool = False, limit: int = 3):
-    """Start the MCP server using stdio and call the Medium tool."""
-    
-    # Path to our built-in MCP server
+async def run_mcp_tool(tool_name: str, arguments: dict):
+    """Generic MCP client that spawns the server and calls a specific tool."""
     server_script = os.path.join(os.path.dirname(__file__), "server.py")
-    
-    # We specify how to spawn the server. 
-    # Since it's a python script, we use the active sys.executable
     server_params = StdioServerParameters(
         command=sys.executable,
         args=[server_script],
         env=None
     )
     
-    print(f"[*] Starting MCP Client and connecting to Server process -> {server_script}")
-    
-    # stdio_client is an async context manager that handles the sub-process pipes
     async with stdio_client(server_params) as (read_stream, write_stream):
-        print("[*] Transports connected. Initializing MCP Session...")
-        
-        # ClientSession negotiates the actual JSON-RPC protocol
         async with ClientSession(read_stream, write_stream) as session:
-            
-            # 1. Initialize the connection
             await session.initialize()
-            print("[+] Session initialized!")
             
-            # 2. Discover available tools
-            tools = await session.list_tools()
-            print("\n[-] Available Tools on Server:")
-            for tool in tools.tools:
-                print(f"    - {tool.name}: {tool.description}")
+            # Call the target tool
+            result = await session.call_tool(tool_name, arguments)
             
-            print(f"\n[*] Calling tool 'get_medium_posts' with query='{query}', is_user={is_user}...")
-            
-            # 3. Call the target tool by name, passing the required arguments
-            result = await session.call_tool(
-                "get_medium_posts", 
-                {"query": query, "is_user": is_user, "limit": limit}
-            )
-            
-            # 4. Return the result
             output_text = ""
             if hasattr(result, "content") and result.content:
                 for content_block in result.content:
@@ -62,6 +36,10 @@ async def run_medium_query(query: str, is_user: bool = False, limit: int = 3):
                 output_text = "No content returned."
                 
             return output_text.strip()
+
+async def run_medium_query(query: str, is_user: bool = False, limit: int = 3):
+    """Legacy wrapper for Medium queries, now using the generic tool runner."""
+    return await run_mcp_tool("get_medium_posts", {"query": query, "is_user": is_user, "limit": limit})
 
 if __name__ == "__main__":
     if sys.platform == "win32":

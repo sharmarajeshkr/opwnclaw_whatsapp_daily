@@ -5,6 +5,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from app.agents.interview_agent import InterviewAgent
 from app.agents.scoring_agent import ScoringAgent
 from app.agents.deep_dive_agent import DeepDiveAgent
+from app.agents.analytic_agent import AnalyticAgent
 from app.agents.news_agent import NewsAgent
 from app.channels.whatsapp.client import WhatsAppClient
 from app.channels.whatsapp.handler import ChannelSender
@@ -14,7 +15,7 @@ from app.services.performance_tracker import PerformanceTracker
 from app.core.logging import get_logger, log_duration
 from app.core.utils import ContextAdapter
 from app.core.limiter import MultiUserLimiter
-from app.mcp.client import run_medium_query
+from app.mcp.client import run_medium_query, run_mcp_tool
 
 logger = get_logger("InterviewScheduler")
 
@@ -32,6 +33,7 @@ class InterviewScheduler:
         self.scoring_agent = ScoringAgent(phone_number)
         self.deep_dive_agent = DeepDiveAgent(phone_number)
         self.news_agent = NewsAgent(phone_number)
+        self.analytic_agent = AnalyticAgent(phone_number)
         self.logger = ContextAdapter(logger, {"phone": phone_number})
         self.sender = ChannelSender(whatsapp, phone_number)
         self.scheduler = AsyncIOScheduler()
@@ -90,9 +92,9 @@ class InterviewScheduler:
     async def daily_task(self):
         self.logger.info(f"🚀 [{self.phone_number}] Starting content delivery cycle")
 
-        # Clear any stale unanswered session from yesterday so scoring
-        # doesn't accidentally apply to the wrong question.
-        SessionManager.clear_all_stale(self.phone_number)
+        # Maintain a rolling 7-day interactive context window.
+        # Older sessions are automatically marked as inactive.
+        SessionManager.prune_expired_sessions(self.phone_number, days=7)
 
         self.sender.refresh_config()
         config = self.sender.config
@@ -107,6 +109,9 @@ class InterviewScheduler:
                 level=level, week=week, skill_profile=self.skill_profile
             )
             image_path = await self.interview_agent.llm.generate_image(image_prompt)
+            # Register as interactive
+            SessionManager.set_active_question(self.phone_number, detailed_text[:500], topics.topic_1)
+            
             await self.sender.send_to_all(
                 detailed_text, image_path,
                 "Visual Diagram for the Challenge",
@@ -146,11 +151,32 @@ class InterviewScheduler:
             await self.sender.send_to_all(full_content, title=f"Deep Dive: {topic}")
             await asyncio.sleep(5)
 
-        # 4. Fresh Updates 1
+        # 4. Fresh Updates 1 (Integrated with real news search)
         if topics.topic_4:
-            content = await self.news_agent.get_curated_content(
-                "Tech_news", f"Top global news about {topics.topic_4} for today."
-            )
+            try:
+                # Fetch real-time tech news via MCP
+                news_data = await run_mcp_tool("get_tech_news", {"query": topics.topic_4, "limit": 3})
+                
+                # Have the LLM rewrite the real data into an engaging WhatsApp digest
+                prompt = (
+                    f"I just pulled the live technical news for '{topics.topic_4}'. "
+                    f"Here is the raw data from my MCP tools:\n\n{news_data}\n\n"
+                    "Please rewrite this into a friendly, structured WhatsApp reading list. "
+                    "Include the exact links so the user can read them. Do not hallucinate any posts. "
+                    "If the data is missing or error, just give a generic but factual update without a link."
+                )
+                
+                content = await self.news_agent.get_curated_content("Tech_news", prompt)
+            except Exception as e:
+                logger.error(f"Error fetching Tech_news for {topics.topic_4}: {e}")
+                # Fallback to generic curated content if search fails
+                content = await self.news_agent.get_curated_content(
+                    "Tech_news", f"Top global news about {topics.topic_4} for today."
+                )
+            
+            # Register as interactive
+            SessionManager.set_active_question(self.phone_number, content[:500], topics.topic_4)
+            
             await self.sender.send_to_all(content, title=f"Fresh Updates: {topics.topic_4}")
             await asyncio.sleep(5)
 
@@ -170,6 +196,10 @@ class InterviewScheduler:
                 )
                 
                 content = await self.news_agent.get_curated_content("Medium_updates", prompt)
+                
+                # Register as interactive
+                SessionManager.set_active_question(self.phone_number, content[:500], topics.topic_5)
+                
                 await self.sender.send_to_all(content, title=f"Latest from Medium: {topics.topic_5}")
             except Exception as e:
                 self.logger.error(f"MCP Integration Error for {topics.topic_5}: {e}")
@@ -177,6 +207,9 @@ class InterviewScheduler:
                 content = await self.news_agent.get_curated_content(
                     "Global_news", f"Top global news about {topics.topic_5} for today."
                 )
+                # Register fallback as interactive
+                SessionManager.set_active_question(self.phone_number, content[:500], topics.topic_5)
+                
                 await self.sender.send_to_all(content, title=f"Fresh Updates: {topics.topic_5}")
 
         self.logger.info(f"✅ [{self.phone_number}] Content delivery cycle completed.")
@@ -220,13 +253,25 @@ class InterviewScheduler:
             # Since the daemon is tied to exactly one user session, we reliably use its own number
             phone = self.phone_number
 
-            # ── Extract plain text ─────────────────────────────────────
+            # ── Extract plain text & Quoted Context ─────────────────────
             msg = message_ev.Message
             text = (
                 getattr(msg, "conversation", "")
                 or getattr(getattr(msg, "extendedTextMessage", None), "text", "")
                 or ""
             ).strip()
+
+            quoted_text = ""
+            ext_msg = getattr(msg, "extendedTextMessage", None)
+            if ext_msg and hasattr(ext_msg, "contextInfo"):
+                ctx = ext_msg.contextInfo
+                if hasattr(ctx, "quotedMessage") and ctx.quotedMessage:
+                    qm = ctx.quotedMessage
+                    # Extract text from the quoted message (could be conversation or extended)
+                    quoted_text = (
+                        getattr(qm, "conversation", "")
+                        or getattr(getattr(qm, "extendedTextMessage", None), "text", "")
+                    ).strip()
 
             if not text:
                 return  # Ignore media, stickers, reactions
@@ -238,9 +283,11 @@ class InterviewScheduler:
                 return
 
             self.logger.info(f"📩 [{phone}] Incoming reply: {text}")
+            if quoted_text:
+                self.logger.debug(f"[{phone}] Detected quoted context: {quoted_text[:100]}...")
 
-            # ── Look up active session ─────────────────────────────────
-            session = SessionManager.get_active_session(phone)
+            # ── Look up active session (now context-aware) ─────────────
+            session = SessionManager.get_active_session(phone, match_text=quoted_text)
             if not session:
                 self.logger.debug(f"[{phone}] No active session — ignoring reply.")
                 
@@ -289,6 +336,7 @@ class InterviewScheduler:
                 score=result["score"],
                 weak_aspects=result["weak_aspects"],
                 feedback=result["feedback"],
+                question_text=session["question"],
             )
 
             # ── Update Streak ─────────────────────────────────────────
@@ -334,11 +382,12 @@ class InterviewScheduler:
     async def weekly_report_task(self):
         """
         Calculates and sends a comprehensive weekly performance summary.
-        Includes Score (0-100), Strengths, and Weaknesses.
+        Includes Score (0-100), Strengths, Weaknesses, and AI Insight.
         """
         self.logger.info(f"📊 [{self.phone_number}] Generating enhanced weekly report...")
+        
+        # 1. Basic Stats
         summary = PerformanceTracker.get_weekly_summary(self.phone_number)
-
         if not summary:
             msg = (
                 "📊 *Weekly Report*\n\n"
@@ -348,7 +397,15 @@ class InterviewScheduler:
             await self.whatsapp.send_message(msg)
             return
 
-        # Calculate Overall Learning Score
+        # 2. Advanced Analysis (AI Insight)
+        detailed_data = PerformanceTracker.get_weekly_detailed_data(self.phone_number)
+        ai_insight = await self.analytic_agent.generate_weekly_insight(detailed_data, self.level)
+        
+        # Cache the insight in DB for API access
+        week_id = datetime.datetime.now().strftime("%Y-W%V")
+        PerformanceTracker.save_weekly_insight(self.phone_number, week_id, ai_insight)
+
+        # 3. Format Report Message
         avg_scores = [float(s["avg_score"]) for s in summary]
         weekly_score = int((sum(avg_scores) / len(avg_scores)) * 10) if avg_scores else 0
         
@@ -363,11 +420,8 @@ class InterviewScheduler:
 
         if strengths:
             lines.append(f"✅ *Strengths:* {', '.join(strengths)}")
-        
         if weaknesses:
             lines.append(f"⚠️ *Focus Areas:* {', '.join(weaknesses)}")
-            
-        lines.append("\n*Detailed Breakdown:*")
 
         for row in summary:
             mastery = ""
@@ -401,7 +455,6 @@ class InterviewScheduler:
                 return
 
             self.logger.info(f"[{self.phone_number}] Delivering topic {slot}: {topic_name}")
-            SessionManager.clear_all_stale(self.phone_number)
             level, week = self._get_progression_context()
 
             if slot == 1:
@@ -409,6 +462,10 @@ class InterviewScheduler:
                     level=level, week=week, skill_profile=self.skill_profile
                 )
                 image_path = await self.interview_agent.llm.generate_image(image_prompt)
+                
+                # Make the challenge interactive
+                SessionManager.set_active_question(self.phone_number, detailed_text[:500], topic_name)
+                
                 await self.sender.send_to_all(
                     detailed_text, image_path,
                     "Visual Diagram for the Challenge",
@@ -423,9 +480,11 @@ class InterviewScheduler:
                 SessionManager.set_active_question(self.phone_number, question, topic)
                 await self.sender.send_to_all(full_content, title=f"Deep Dive: {topic}")
             elif slot == 4:
-                content = await self.agent.get_curated_content(
+                content = await self.news_agent.get_curated_content(
                     "Tech_news", f"Top global news about {topic_name} for today."
                 )
+                # News is now interactive! User can ask for more details.
+                SessionManager.set_active_question(self.phone_number, content[:500], topic_name)
                 await self.sender.send_to_all(content, title=f"Fresh Updates: {topic_name}")
             elif slot == 5:
                 try:
@@ -438,12 +497,18 @@ class InterviewScheduler:
                         "Include the exact links so the user can read them. Do not hallucinate any posts."
                     )
                     content = await self.news_agent.get_curated_content("Medium_updates", prompt)
+                    
+                    # Medium updates are now interactive context!
+                    SessionManager.set_active_question(self.phone_number, content[:500], topic_name)
+                    
                     await self.sender.send_to_all(content, title=f"Latest from Medium: {topic_name}")
                 except Exception as e:
                     self.logger.error(f"MCP Error for {topic_name}: {e}")
                     content = await self.news_agent.get_curated_content(
                         "Global_news", f"Top global news about {topic_name} for today."
                     )
+                    # Enqueue fallback news as context too
+                    SessionManager.set_active_question(self.phone_number, content[:500], topic_name)
                     await self.sender.send_to_all(content, title=f"Fresh Updates: {topic_name}")
 
             self.logger.info(f"✅ [{self.phone_number}] Topic {slot} delivery done.")

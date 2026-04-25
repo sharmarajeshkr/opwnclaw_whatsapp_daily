@@ -51,16 +51,16 @@ PHONE = "919876543210"
 PHONE2 = "919111111111"
 
 
-def _insert_score(phone, topic, score, days_ago=0):
+def _insert_score(phone, topic, score, days_ago=0, q_text="Some question"):
     """Helper: insert a score with a controlled answered_at date."""
     from app.database.db import get_conn
     answered = (datetime.now(timezone.utc) - timedelta(days=days_ago)).isoformat()
     with get_conn() as conn:
         conn.execute(
             "INSERT INTO performance_scores "
-            "(phone_number, topic, score, weak_aspects, feedback, answered_at) "
-            "VALUES (%s, %s, %s, %s, %s, %s)",
-            (phone, topic, score, json.dumps([]), "ok", answered),
+            "(phone_number, topic, score, weak_aspects, feedback, question_text, answered_at) "
+            "VALUES (%s, %s, %s, %s, %s, %s, %s)",
+            (phone, topic, score, json.dumps([]), "ok", q_text, answered),
         )
 
 
@@ -114,6 +114,13 @@ class TestRecordScore:
         PerformanceTracker.record_score(PHONE, "Kafka", 9, [], "Perfect!")
         rows = _fetch_perf_rows(isolated_db, PHONE)
         assert json.loads(rows[0]["weak_aspects"]) == []
+
+    def test_question_text_persisted(self, isolated_db):
+        from app.services.performance_tracker import PerformanceTracker
+        q_text = "How to handle offset commit failures in Kafka?"
+        PerformanceTracker.record_score(PHONE, "Kafka", 8, [], "ok", question_text=q_text)
+        rows = _fetch_perf_rows(isolated_db, PHONE)
+        assert rows[0]["question_text"] == q_text
 
 
 # ── get_weak_topics ────────────────────────────────────────────────────────────

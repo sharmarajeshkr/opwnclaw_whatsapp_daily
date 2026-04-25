@@ -34,6 +34,19 @@ def to_whatsapp_style(text: str) -> str:
     # Convert [Text](URL) to Text: URL
     text = re.sub(r'\[(.*?)\]\((.*?)\)', r'\1: \2', text)
 
+    # DEFENSIVE: Strip placeholder links (hallucinations like example.com)
+    # This prevents the user from receiving fake URLs even if the LLM slips up.
+    placeholders = [
+        r'https?://(?:www\.)?example\.com[^\s]*',
+        r'https?://(?:www\.)?hallucinated\.com[^\s]*',
+        r'https?://(?:www\.)?yourwebsite\.com[^\s]*'
+    ]
+    for p in placeholders:
+        def replace_fake(match):
+            # Try to keep the label or context if possible, but remove the link
+            return " (link unavailable - please search for this topic for latest docs)"
+        text = re.sub(p, replace_fake, text, flags=re.IGNORECASE)
+
     # Clean up excessive newlines
     text = re.sub(r'\n{3,}', '\n\n', text)
 
