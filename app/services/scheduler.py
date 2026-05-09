@@ -6,6 +6,7 @@ from app.agents.interview_agent import InterviewAgent
 from app.agents.scoring_agent import ScoringAgent
 from app.agents.deep_dive_agent import DeepDiveAgent
 from app.agents.curator_agent import CuratorAgent
+from app.agents.coding_agent import CodingAgent
 from app.channels.whatsapp.client import WhatsAppClient
 from app.channels.whatsapp.handler import ChannelSender
 from app.core.config import ConfigManager
@@ -32,6 +33,7 @@ class InterviewScheduler:
         self.scoring_agent = ScoringAgent(phone_number)
         self.deep_dive_agent = DeepDiveAgent(phone_number)
         self.curator_agent = CuratorAgent(phone_number)
+        self.coding_agent = CodingAgent(phone_number)
         self.logger = ContextAdapter(logger, {"phone": phone_number})
         self.sender = ChannelSender(whatsapp, phone_number)
         self.scheduler = AsyncIOScheduler()
@@ -194,6 +196,13 @@ class InterviewScheduler:
                     self.logger.error(f"❌ Double failure for Medium: {e2}")
                     # No fallback to Global News to avoid hallucinations.
 
+
+        # 6. Daily Coding Exercise (Python & Java)
+        if topics.topic_6:
+            level, week = self._get_progression_context()
+            content = await self.coding_agent.get_daily_exercise(level=level, week=week)
+            await self.sender.send_to_all(content, title=f"Daily Coding Exercise: {topics.topic_6}")
+            await asyncio.sleep(5)
 
         self.logger.info(f"✅ [{self.phone_number}] Content delivery cycle completed.")
 
@@ -405,78 +414,82 @@ class InterviewScheduler:
     # ------------------------------------------------------------------
 
     def _make_topic_task(self, slot: int):
-        """Return an async function that delivers only the content for a given topic slot (1-5)."""
+        """Return an async function that delivers only the content for a given topic slot (1-6)."""
         async def _task():
-            self.sender.refresh_config()
-            config = self.sender.config
-            topics = config.topics
-            topic_name = getattr(topics, f"topic_{slot}", "")
-            if not topic_name:
-                return
+            try:
+                self.sender.refresh_config()
+                config = self.sender.config
+                topics = config.topics
+                topic_name = getattr(topics, f"topic_{slot}", "")
+                if not topic_name:
+                    return
 
-            self.logger.info(f"[{self.phone_number}] Delivering topic {slot}: {topic_name}")
-            SessionManager.clear_all_stale(self.phone_number)
-            level, week = self._get_progression_context()
+                self.logger.info(f"[{self.phone_number}] Delivering topic {slot}: {topic_name}")
+                SessionManager.clear_all_stale(self.phone_number)
+                level, week = self._get_progression_context()
 
-            if slot == 1:
-                detailed_text, image_prompt = await self.interview_agent.get_daily_challenge(
-                    level=level, week=week, skill_profile=self.skill_profile
-                )
-                image_path = await self.interview_agent.llm.generate_image(image_prompt)
-                await self.sender.send_to_all(
-                    detailed_text, image_path,
-                    "Visual Diagram for the Challenge",
-                    title=topic_name
-                )
-            elif slot in (2, 3, 4):
-                weak_topics = PerformanceTracker.get_weak_topics(self.phone_number)
-                topic = weak_topics[0] if weak_topics else topic_name
-                question, full_content = await self.deep_dive_agent.get_deep_dive_with_question(
-                    topic, level=level, week=week, skill_profile=self.skill_profile
-                )
-                SessionManager.set_active_question(self.phone_number, question, topic)
-                await self.sender.send_to_all(full_content, title=f"Deep Dive: {topic}")
-            elif slot == 5:
-                try:
-                    # AI-Powered Tag Predictor: Handles ANY topic name dynamically
-                    tag = await self.curator_agent.get_best_medium_tag(topic_name)
-                    
-                    self.logger.info(f"🔍 [Slot 5] AI predicted tag: '{tag}' for topic: '{topic_name}'")
-                    
-                    mcp_data = await run_medium_query(tag, is_user=False, limit=3)
-                    self.logger.info(f"✅ [Slot 5] Received MCP Data length: {len(mcp_data)} bytes")
-                    
-                    if "No posts found" in mcp_data:
-                        self.logger.warning(f"⚠️ [Slot 5] No posts found on Medium for tag '{tag}'. Will try fallback news.")
-                        raise Exception(f"No Medium posts for tag '{tag}'")
-
-                        
-                    prompt = (
-                        f"I just pulled the live Medium.com RSS feed for '{topic_name}'. "
-                        f"Here is the raw data from my MCP tools:\n\n{mcp_data}\n\n"
-                        "Please rewrite this into a friendly, structured WhatsApp reading list. "
-                        "CRITICAL: You MUST include the EXACT 'freedium-mirror.cfd' links provided in the raw data so the user can bypass the paywall. "
-                        "Do not alter the URLs or hallucinate any posts."
+                if slot == 1:
+                    detailed_text, image_prompt = await self.interview_agent.get_daily_challenge(
+                        level=level, week=week, skill_profile=self.skill_profile
                     )
-                    content = await self.curator_agent.get_curated_content("Medium_updates", prompt)
-                    await self.sender.send_to_all(content, title=f"Latest from Medium: {topic_name}")
-                except Exception as e:
-                    self.logger.error(f"❌ MCP/Medium Error for {topic_name}: {e}. Retrying with generic 'technology' tag...")
+                    image_path = await self.interview_agent.llm.generate_image(image_prompt)
+                    await self.sender.send_to_all(
+                        detailed_text, image_path,
+                        "Visual Diagram for the Challenge",
+                        title=topic_name
+                    )
+                elif slot in (2, 3, 4):
+                    weak_topics = PerformanceTracker.get_weak_topics(self.phone_number)
+                    topic = weak_topics[0] if weak_topics else topic_name
+                    question, full_content = await self.deep_dive_agent.get_deep_dive_with_question(
+                        topic, level=level, week=week, skill_profile=self.skill_profile
+                    )
+                    SessionManager.set_active_question(self.phone_number, question, topic)
+                    await self.sender.send_to_all(full_content, title=f"Deep Dive: {topic}")
+                elif slot == 5:
                     try:
-                        mcp_data = await run_medium_query("technology", is_user=False, limit=3)
+                        # AI-Powered Tag Predictor: Handles ANY topic name dynamically
+                        tag = await self.curator_agent.get_best_medium_tag(topic_name)
+                        self.logger.info(f"🔍 [Slot 5] AI predicted tag: '{tag}' for topic: '{topic_name}'")
+                        mcp_data = await run_medium_query(tag, is_user=False, limit=3)
+                        self.logger.info(f"✅ [Slot 5] Received MCP Data length: {len(mcp_data)} bytes")
+                        if "No posts found" in mcp_data:
+                            self.logger.warning(f"⚠️ [Slot 5] No posts found on Medium for tag '{tag}'. Will try fallback news.")
+                            raise Exception(f"No Medium posts for tag '{tag}'")
                         prompt = (
-                            f"I tried to find Medium.com articles for '{topic_name}' but failed. "
-                            f"Instead, I found these top technology articles:\n\n{mcp_data}\n\n"
-                            "Please rewrite this into a friendly WhatsApp reading list. "
-                            "CRITICAL: Use ONLY the exact links provided. ALL links must be from Medium (via freedium-mirror.cfd)."
+                            f"I just pulled the live Medium.com RSS feed for '{topic_name}'. "
+                            f"Here is the raw data from my MCP tools:\n\n{mcp_data}\n\n"
+                            "Please rewrite this into a friendly, structured WhatsApp reading list. "
+                            "CRITICAL: You MUST include the EXACT 'freedium-mirror.cfd' links provided in the raw data so the user can bypass the paywall. "
+                            "Do not alter the URLs or hallucinate any posts."
                         )
                         content = await self.curator_agent.get_curated_content("Medium_updates", prompt)
-                        await self.sender.send_to_all(content, title=f"Tech Insights: {topic_name}")
-                    except Exception as e2:
-                        self.logger.error(f"❌ Double failure for Medium: {e2}")
+                        await self.sender.send_to_all(content, title=f"Latest from Medium: {topic_name}")
+                    except Exception as e:
+                        self.logger.error(f"❌ MCP/Medium Error for {topic_name}: {e}. Retrying with generic 'technology' tag...")
+                        try:
+                            mcp_data = await run_medium_query("technology", is_user=False, limit=3)
+                            prompt = (
+                                f"I tried to find Medium.com articles for '{topic_name}' but failed. "
+                                f"Instead, I found these top technology articles:\n\n{mcp_data}\n\n"
+                                "Please rewrite this into a friendly WhatsApp reading list. "
+                                "CRITICAL: Use ONLY the exact links provided. ALL links must be from Medium (via freedium-mirror.cfd)."
+                            )
+                            content = await self.curator_agent.get_curated_content("Medium_updates", prompt)
+                            await self.sender.send_to_all(content, title=f"Tech Insights: {topic_name}")
+                        except Exception as e2:
+                            self.logger.error(f"❌ Double failure for Medium slot 5: {e2}")
+                elif slot == 6:
+                    content = await self.coding_agent.get_daily_exercise(level=level, week=week)
+                    await self.sender.send_to_all(content, title=f"Daily Coding Exercise: {topic_name}")
 
+                self.logger.info(f"✅ [{self.phone_number}] Topic {slot} delivery done.")
 
-            self.logger.info(f"✅ [{self.phone_number}] Topic {slot} delivery done.")
+            except Exception as top_exc:
+                self.logger.error(
+                    f"❌ [{self.phone_number}] FATAL error in topic {slot} task: {top_exc}",
+                    exc_info=True
+                )
 
         _task.__name__ = f"topic_{slot}_task"
         return _task
@@ -497,7 +510,7 @@ class InterviewScheduler:
     def _register_topic_jobs(self, config, timezone_str: str):
         """Register one APScheduler cron job per topic, each at its own time."""
         self._topic_jobs = []
-        for slot in range(1, 6):
+        for slot in range(1, 7):
             topic_name = getattr(config.topics, f"topic_{slot}", "")
             if not topic_name:
                 continue

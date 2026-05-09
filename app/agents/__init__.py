@@ -8,3 +8,4 @@ from .interview_agent import InterviewAgent
 from .scoring_agent import ScoringAgent
 from .deep_dive_agent import DeepDiveAgent
 from .curator_agent import CuratorAgent
+from .coding_agent import CodingAgent

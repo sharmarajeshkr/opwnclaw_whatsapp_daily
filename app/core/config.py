@@ -61,6 +61,8 @@ class TopicsConfig(BaseModel):
     topic_4_time: str = ""
     topic_5: str = "Latest Global News"
     topic_5_time: str = ""
+    topic_6: str = "Daily Coding Exercise"
+    topic_6_time: str = ""   # Daily coding problem with Python & Java solutions
 
 class ChannelsConfig(BaseModel):
     whatsapp_target: str = ""

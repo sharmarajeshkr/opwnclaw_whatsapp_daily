@@ -685,6 +685,7 @@ if tab_config is not None:
                     ("3", "🔬 Frontend ReactJS interview quiestion and Answers topics wise"),
                     ("4", "📰 ML and Agentic-AI topics wise detailed explanation"),
                     ("5", "📰 Article from Medium.com "),
+                    ("6", "💻 Daily Coding Exercise (Python & Java)"),
                 ]
                 topic_values = {}
                 for n, label in TOPIC_DEFS:
@@ -754,6 +755,7 @@ if tab_config is not None:
                                 "topic_3": topic_values["t3"], "topic_3_time": topic_values["t3_time"],
                                 "topic_4": topic_values["t4"], "topic_4_time": topic_values["t4_time"],
                                 "topic_5": topic_values["t5"], "topic_5_time": topic_values["t5_time"],
+                                "topic_6": topic_values["t6"], "topic_6_time": topic_values["t6_time"],
                             },
                             skill_profile={
                                 "backend": prof_backend,

@@ -13,7 +13,7 @@ from app.core.config import settings, ConfigManager
 from app.database.db import init_db
 from app.core.logging import get_logger
 from app.channels.whatsapp.client import WhatsAppClient
-from app.services.scheduler import InterviewScheduler
+from app.llm.backend_selector import get_scheduler_class, is_ollama_mode
 from app.core.utils import is_user_paired
 
 logger = get_logger("Main")
@@ -25,8 +25,9 @@ async def run_user_bot(phone_number: str):
     # Initialize the client first
     whatsapp = WhatsAppClient(phone_number=phone_number)
     
-    # The Scheduler now handles its own specialized agents internally
-    scheduler = InterviewScheduler(whatsapp, phone_number=phone_number)
+    # The Scheduler is chosen dynamically based on LLM_BACKEND in .env
+    SchedulerClass = get_scheduler_class()
+    scheduler = SchedulerClass(whatsapp, phone_number=phone_number)
     
     await scheduler.start()
 
@@ -76,8 +77,8 @@ async def main():
     logger.info("      Interview Multi-User Bot Daemon         ")
     logger.info("=============================================")
 
-    # Security check: Ensure LLM keys are present
-    if not settings.OPENAI_API_KEY and not settings.GEMINI_API_KEY:
+    # Security check: Ensure LLM keys are present (skip key check when using Ollama)
+    if not is_ollama_mode() and not settings.OPENAI_API_KEY and not settings.GEMINI_API_KEY:
         logger.error("FATAL: No LLM API keys found in environment (OPENAI_API_KEY or GEMINI_API_KEY).")
         sys.exit(1)
 

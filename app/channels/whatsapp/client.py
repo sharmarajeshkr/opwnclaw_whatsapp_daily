@@ -148,6 +148,16 @@ class WhatsAppClient:
             except Exception as e:
                 self.logger.error(f"Error sending message (Attempt {attempt+1}): {e}")
                 if attempt < retries - 1:
+                    # If the WS dropped mid-delivery, force a reconnect before the next attempt
+                    err_str = str(e).lower()
+                    if "websocket" in err_str or "not connected" in err_str:
+                        self.logger.warning(f"[{self.phone_number}] WS disconnected during send — attempting reconnect...")
+                        self.connected = False
+                        self.is_ready.clear()
+                        try:
+                            await self.connect()
+                        except Exception as reconn_err:
+                            self.logger.error(f"[{self.phone_number}] Reconnect failed: {reconn_err}")
                     await asyncio.sleep(5 * (attempt + 1))  # Exponential backoff
                 else:
                     raise e
